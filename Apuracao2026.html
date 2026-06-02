@@ -338,7 +338,7 @@ function processFaturamento(rows) {
     var cbs  = tf(row[15]);
 
     // PIS e COFINS calculados pelo app pelo regime
-    var regime, pis_cum=0,cof_cum=0,pis_nc=0,cof_nc=0;
+    var regime, pis_cum=0,cof_cum=0,pis_nc=0,cof_nc=0,ir=0;
 
     if(ITENS_EXP[item]) {
       regime='Exportação'; FAT[m].exp+=valor;
@@ -347,6 +347,7 @@ function processFaturamento(rows) {
       regime='Cumulativo'; FAT[m].cum+=valor;
       pis_cum = Math.round(valor * 0.0065 * 100) / 100;
       cof_cum = Math.round(valor * 0.03   * 100) / 100;
+      ir      = Math.round(valor * 0.015  * 100) / 100;
     } else {
       regime='Não Cumulativo'; FAT[m].nc+=valor;
       pis_nc  = Math.round(valor * 0.0165 * 100) / 100;
@@ -359,13 +360,13 @@ function processFaturamento(rows) {
       item:item, regime:regime,
       pisCum:pis_cum, cofCum:cof_cum,
       pisNC:pis_nc, cofNC:cof_nc,
-      iss:iss, inss:inss, ibs:ibs, cbs:cbs, csrf:csrf,
+      iss:iss, inss:inss, ibs:ibs, cbs:cbs, csrf:csrf, ir:ir,
     });
   });
 
   MESES_ALL.forEach(function(m){
     FAT[m].total=FAT[m].cum+FAT[m].nc+FAT[m].exp;
-    ['pisCum','cofCum','pisNC','cofNC','iss','inss','ibs','cbs','csrf'].forEach(function(k){
+    ['pisCum','cofCum','pisNC','cofNC','iss','inss','ibs','cbs','csrf','ir'].forEach(function(k){
       FAT[m][k]=FAT[m].nfs.reduce(function(s,n){return s+(n[k]||0);},0);
     });
   });
@@ -441,30 +442,40 @@ function processCredito(rows) {
 }
 
 // ── Processamento Depreciação ──────────────────────────────────────────────
-// Cols: Conta | ? | Data | Valor | ? | ? | Centro | NomeCentro
+// Cols Sheets: 0=Tipo|1=Data|2=Valor|3=Memorando|4=Classe:Código|5=Classe:Nome|6=Conta
 function processDepreciacao(rows) {
   var DEP = {};
   MESES_ALL.forEach(function(m){DEP[m]={maq:0,comp:0,soft:0,itens:[]};});
+  if(!rows||!rows.length) return DEP;
+
   rows.slice(1).forEach(function(row){
-    if(!row[0]) return;
-    var conta=String(row[0]); var data=parseDateBR(row[2]); var m=mesKey(data);
-    if(!m) return;
-    var val=tf(row[3]); var centro=String(row[6]||'').trim(); var nome_c=String(row[7]||'').trim();
+    if(!row[1]) return;
+    var data  = parseDateBR(String(row[1]||'').trim());
+    if(!data) return;
+    var m = mesKey(data); if(!m) return;
+    var val    = tf(row[2]);
+    var centro = String(row[4]||'').trim();
+    var nome_c = String(row[5]||'').trim();
+    var conta  = String(row[6]||'').trim();
+
     if(!CENTROS_VALIDOS[centro]) return;
-    var alerta=!!CENTROS_ALERTA[centro];
+    var alerta = !!CENTROS_ALERTA[centro];
     var tp;
-    if(conta.indexOf('0002')>=0){DEP[m].maq+=val;tp='Máquinas';}
-    else if(conta.indexOf('0003')>=0){DEP[m].comp+=val;tp='Computadores';}
-    else if(conta.indexOf('0001')>=0&&conta.toUpperCase().indexOf('AMORT')>=0){DEP[m].soft+=val;tp='Softwares';}
+
+    if(conta.indexOf('0002')>=0) { DEP[m].maq+=val; tp='Máquinas'; }
+    else if(conta.indexOf('0003')>=0) { DEP[m].comp+=val; tp='Computadores'; }
+    else if(conta.indexOf('0001')>=0 && conta.toUpperCase().indexOf('AMORT')>=0) { DEP[m].soft+=val; tp='Softwares'; }
     else return;
+
     DEP[m].itens.push({tipo:tp,centro:centro,nome_c:nome_c,valor:val,alerta:alerta});
   });
+
   MESES_ALL.forEach(function(m){
-    DEP[m].pisMaq=DEP[m].maq*0.0165; DEP[m].cofMaq=DEP[m].maq*0.076;
-    DEP[m].pisComp=DEP[m].comp*0.0165; DEP[m].cofComp=DEP[m].comp*0.076;
-    DEP[m].pisSoft=DEP[m].soft*0.0165; DEP[m].cofSoft=DEP[m].soft*0.076;
-    DEP[m].pisTot=DEP[m].pisMaq+DEP[m].pisComp+DEP[m].pisSoft;
-    DEP[m].cofTot=DEP[m].cofMaq+DEP[m].cofComp+DEP[m].cofSoft;
+    DEP[m].pisMaq  = DEP[m].maq  * 0.0165; DEP[m].cofMaq  = DEP[m].maq  * 0.076;
+    DEP[m].pisComp = DEP[m].comp * 0.0165; DEP[m].cofComp = DEP[m].comp * 0.076;
+    DEP[m].pisSoft = DEP[m].soft * 0.0165; DEP[m].cofSoft = DEP[m].soft * 0.076;
+    DEP[m].pisTot  = DEP[m].pisMaq + DEP[m].pisComp + DEP[m].pisSoft;
+    DEP[m].cofTot  = DEP[m].cofMaq + DEP[m].cofComp + DEP[m].cofSoft;
   });
   return DEP;
 }
@@ -626,6 +637,7 @@ function nfsePanel(m) {
       '<td style="text-align:center;font-size:10px;font-weight:700;color:#888">'+n.item+'</td>'+
       '<td style="text-align:center"><span class="'+cls+'">'+n.regime+'</span></td>'+
       '<td style="color:#E67E22">'+BRL(n.iss)+'</td>'+
+      '<td style="color:#8E44AD">'+((n.ir||0)>0?BRL(n.ir):'—')+'</td>'+
       '<td style="color:#7B241C">'+BRL(n.pisCum||n.pisNC)+'</td>'+
       '<td style="color:#7B241C">'+BRL(n.cofCum||n.cofNC)+'</td>'+
       '<td style="color:#E67E22">'+BRL(n.inss)+'</td>'+
@@ -654,6 +666,7 @@ function nfsePanel(m) {
     '<th style="text-align:center;min-width:50px">Item</th>'+
     '<th style="text-align:center;min-width:100px">Regime</th>'+
     '<th style="min-width:90px">ISS</th>'+
+    '<th style="min-width:90px">IR Ret.(1,5%)</th>'+
     '<th style="min-width:90px">PIS</th>'+
     '<th style="min-width:90px">COFINS</th>'+
     '<th style="min-width:90px">INSS</th>'+
@@ -665,6 +678,7 @@ function nfsePanel(m) {
     '<td style="font-weight:700">'+BRL(totCum+totNC+totExp)+'</td>'+
     '<td colspan="2" style="font-size:10px;text-align:center">'+meta+'</td>'+
     '<td style="font-weight:700">'+BRL(sumIss)+'</td>'+
+    '<td style="font-weight:700">'+BRL(nfs.reduce(function(s,n){return s+(n.ir||0);},0))+'</td>'+
     '<td style="font-weight:700">'+BRL(sumPis)+'</td>'+
     '<td style="font-weight:700">'+BRL(sumCof)+'</td>'+
     '<td style="font-weight:700">'+BRL(sumInss)+'</td>'+
