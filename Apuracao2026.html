@@ -653,7 +653,6 @@ async function syncSheets() {
     var meses=Object.keys(HIST);
     if(meses.length){S.mes=meses[meses.length-1];}
     document.getElementById('lastSync').textContent='Atualizado: '+new Date().toLocaleTimeString('pt-BR');
-    buildSidebar(); updateHeader(); render();
     showStatus('✅ Dados atualizados — '+meses.length+' meses carregados');
   } catch(err){
     console.error(err);
@@ -668,6 +667,7 @@ async function syncSheets() {
     setLoading(false);
     btn.disabled=false; btn.textContent='🔄 Atualizar';
   }
+  buildSidebar(); updateHeader(); render();
 }
 
 function setLoading(show,text,sub){
