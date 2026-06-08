@@ -1578,14 +1578,15 @@ function conciliar(HIST, mes, razaoData) {
   var rfLancado=razaoData.recFin.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var rfStatus=razaoData.recFin.length===0?'pendente':(Math.abs(rfImpostos-rfLancado)<1?'ok':'divergente');
   // 3. Transf. Saldo Credor — comparar PIS+COFINS a pagar
-  // Transf. Saldo Credor: NC (líquido pós-crédito) + CUM bruto (antes da retenção)
-  // JE2891 = PIS NC + COFINS NC = darfPisNC + darfCofNC
-  // JE2893 = PIS CUM bruto + COFINS CUM bruto = fat.pisCum + fat.cofCum
-  var transfPisNC  = m.darfPisNC||0;
-  var transfCofNC  = m.darfCofNC||0;
-  var transfPisCum = m.fat&&m.fat.pisCum||0;
-  var transfCofCum = m.fat&&m.fat.cofCum||0;
-  var transfEsp = transfPisNC + transfCofNC + transfPisCum + transfCofCum;
+  // Transf. Saldo Credor:
+  // JE2891 = crédito NC utilizável (pós-rateio)
+  // JE2893 = retenção CUM (ret.pis + ret.cof)
+  var _n=m.fat.nc+m.fat.exp+(m.recFin.total||0);
+  var _d=m.fat.cum+m.fat.nc+m.fat.exp+(m.recFin.total||0);
+  var _f=_d?_n/_d:0;
+  var credPisUtil_=(m.cred.pisTot||0)*_f;
+  var credCofUtil_=(m.cred.cofTot||0)*_f;
+  var transfEsp=credPisUtil_+credCofUtil_+(m.ret&&m.ret.pis||0)+(m.ret&&m.ret.cof||0);
   var transfLanc=razaoData.transf.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var transfStatus=razaoData.transf.length===0?'pendente':(Math.abs(transfEsp-transfLanc)<1?'ok':'divergente');
   // 4. Conferência DARFs — soma notas - créditos = DARF
@@ -1611,7 +1612,7 @@ function conciliar(HIST, mes, razaoData) {
   return {nfs:resultNfs,
           rfImpostos:rfImpostos,rfLancado:rfLancado,rfStatus:rfStatus,rfItems:razaoData.recFin,
           transfEsp:transfEsp,transfLanc:transfLanc,transfStatus:transfStatus,transfItems:razaoData.transf,
-          darfCheck:darfCheck,fator:fator,credPis:credPis,credCof:credCof};
+          darfCheck:darfCheck,fator:fator,credPis:credPis,credCof:credCof,credPisUtil_:credPisUtil_,credCofUtil_:credCofUtil_};
 }
 
 function statusBadge(st){
@@ -1691,8 +1692,10 @@ function step4() {
   h2+='<div class="card"><div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between">'+
     '<div class="card-title">🔄 Conciliação Transf. Saldo Credor PIS/COFINS ('+S.mes+'/2026)</div>'+statusBadge(conc.transfStatus)+'</div><div class="card-body">'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'+
-    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS a Pagar</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL((m.darfPisCum||0)+(m.darfPisNC||0))+'</div></div>'+
-    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">COFINS a Pagar</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL((m.darfCofCum||0)+(m.darfCofNC||0))+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Crédito PIS Util. (JE2891)</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(conc.credPisUtil_)+'</div>'+
+    '<div style="font-size:10px;color:#666;margin-top:2px">+ Ret. CUM '+BRL(m.ret&&m.ret.pis||0)+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Crédito COFINS Util. (JE2891)</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(conc.credCofUtil_)+'</div>'+
+    '<div style="font-size:10px;color:#666;margin-top:2px">+ Ret. CUM '+BRL(m.ret&&m.ret.cof||0)+'</div></div>'+
     '<div style="background:'+(conc.transfStatus==='ok'?'#D4EDDA':conc.transfStatus==='pendente'?'#FEF9EC':'#FADBD8')+';border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Total Lançado Razão</div><div style="font-size:14px;font-weight:700;color:'+(conc.transfStatus==='ok'?'#1A7340':conc.transfStatus==='pendente'?'#856404':'#922B21')+'">'+BRL(conc.transfLanc)+'</div></div>'+
     '</div>';
   if(conc.transfItems.length){
