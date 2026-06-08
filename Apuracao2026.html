@@ -611,6 +611,9 @@ async function syncSheets() {
     setLoadingSub('Lendo razão contábil...');
     var razaoRows = await fetchSheet('razão');
     RAZAO_ROWS = razaoRows;
+    setLoadingSub('Lendo retenções...');
+    var retFatRows = await fetchSheet('Retenção sobre faturamento');
+    RET_UPLOAD = processRetencaoSheets(retFatRows);
     setLoadingSub('Processando dados...');
     var FAT =processFaturamento(fatRows);
     var RF  =processReceitaFin(rfRows);
@@ -1812,4 +1815,46 @@ buildSidebar(); updateHeader(); render();
 
 
 </body>
-</html>
+</html// ── Processamento Retenção sobre Faturamento (Sheets) ────────────────────────
+function processRetencaoSheets(rows) {
+  var RET={};
+  MESES_ALL.forEach(function(m){RET[m]={pis:0,cof:0,nfs:[]};});
+  if(!rows||rows.length<2) return RET;
+  function pd(v){
+    if(!v)return null;
+    var s=String(v).trim(),m=s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if(m)return new Date(+m[3],+m[2]-1,+m[1]);
+    return null;
+  }
+  function mk(d){if(!d||d.getFullYear()!==2026)return null;return MESES_ALL[d.getMonth()]||null;}
+  var last={nfse:'',emissao:null,valor:0,cnpj:'',tomador:''};
+  rows.slice(1).forEach(function(row){
+    var col0=String(row[0]||'').trim();
+    // Skip header/total rows
+    if(!col0&&!row[4]&&!row[5]) return;
+    if(isNaN(parseFloat(col0))&&col0!=='') return;
+    var pis=tf(row[4]),cof=tf(row[5]);
+    var dPis=pd(row[9]),dCof=pd(row[10]);
+    var cnpj=String(row[11]||'').trim(),tom=String(row[12]||'').trim();
+    if(col0&&!isNaN(parseFloat(col0))){
+      last={nfse:col0,emissao:pd(row[1]),valor:tf(row[2]),cnpj:cnpj||last.cnpj,tomador:tom||last.tomador};
+    }
+    var mP=mk(dPis),mC=mk(dCof);
+    if(pis>0&&mP){
+      RET[mP].pis+=pis;
+      RET[mP].nfs.push({nfse:last.nfse,tomador:last.tomador||tom,cnpj:last.cnpj||cnpj,
+        valor:last.valor,pisRet:pis,cofRet:0,
+        data:last.emissao?last.emissao.toLocaleDateString('pt-BR'):'—'});
+    }
+    if(cof>0&&mC){
+      RET[mC].cof+=cof;
+      if(pis>0&&mP===mC&&RET[mC].nfs.length)RET[mC].nfs[RET[mC].nfs.length-1].cofRet=cof;
+      else RET[mC].nfs.push({nfse:last.nfse,tomador:last.tomador||tom,cnpj:last.cnpj||cnpj,
+        valor:last.valor,pisRet:0,cofRet:cof,
+        data:last.emissao?last.emissao.toLocaleDateString('pt-BR'):'—'});
+    }
+  });
+  return RET;
+}
+
+>
