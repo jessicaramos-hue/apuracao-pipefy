@@ -198,6 +198,7 @@ table.ann .tot-row td{background:#C8962E!important;color:#fff!important;font-wei
     <div class="sb-item" onclick="setStep(1)">📅 Visão Anual</div>
     <div class="sb-item" onclick="setStep(2)">💳 DARFs</div>
     <div class="sb-item" onclick="setStep(3)">📥 Exportar</div>
+    <div class="sb-item" onclick="setStep(4)">📒 Razão Contábil</div>
     <div class="sb-sec">Meses</div>
     <div id="sb-meses"></div>
     <div class="sb-foot">
@@ -247,6 +248,7 @@ var S = {step:0, mes:'Jan', darfs:{}, open:{}};
 var tokenClient = null;
 var accessToken = null;
 var RET_UPLOAD  = null;
+var RAZAO_ROWS  = null;
 var BRL = function(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});};
 
 // ── Google Identity Services ───────────────────────────────────────────────
@@ -638,6 +640,9 @@ async function syncSheets() {
     var credRows = await fetchSheet('Credito PIS_COFINS');
     setLoadingSub('Lendo depreciações...');
     var depRows  = await fetchSheet('depreciação');
+    setLoadingSub('Lendo razão contábil...');
+    var razaoRows = await fetchSheet('razão');
+    RAZAO_ROWS = razaoRows;
     setLoadingSub('Lendo retenções...');
     var retFatRows = await fetchSheet('Retenção sobre faturamento');
     RET_UPLOAD = processRetencaoSheets(retFatRows);
@@ -1445,7 +1450,7 @@ function selecionarMes(key) {
 function setStep(s) {
   S.step=s;
   document.querySelectorAll('.sb-item').forEach(function(el,i){el.classList.toggle('active',i===s);});
-  document.getElementById('tb-title').textContent=['Apuração Consolidada','Visão Anual','DARFs e Comprovantes','Exportar'][s];
+  document.getElementById('tb-title').textContent=['Apuração Consolidada','Visão Anual','DARFs e Comprovantes','Exportar','Razão Contábil'][s];
   render();
 }
 
@@ -1474,7 +1479,7 @@ function buildSidebar() {
 }
 
 function render() {
-  document.getElementById('content').innerHTML=[step0,step1,step2,step3][S.step]();
+  document.getElementById('content').innerHTML=[step0,step1,step2,step3,step4][S.step]();
   var up=document.getElementById('darf-upload');
   if(up) up.addEventListener('change',async function(e){
     for(var i=0;i<e.target.files.length;i++) await processarDarf(e.target.files[i],S.mes);
@@ -1522,6 +1527,194 @@ function processRetencaoSheets(rows) {
   return RET;
 }
 
+
+function processRazao(rows, mes) {
+  var result={nfs:[],recFin:[],transf:[],outros:[]};
+  if(!rows||rows.length<2) return result;
+  var mesNum={Jan:'01',Fev:'02',Mar:'03',Abr:'04',Mai:'05',Jun:'06',Jul:'07',Ago:'08',Set:'09',Out:'10',Nov:'11',Dez:'12'};
+  var mesRef = mesNum[mes]||'';
+  rows.slice(1).forEach(function(row){
+    if(!row[1]) return;
+    var doc  = String(row[2]||'').trim();
+    var nfse = String(row[3]||'').trim();
+    var nome = String(row[4]||'').trim();
+    var valor= tf(row[5]);
+    var memo = String(row[6]||'').trim();
+    var memoUp = memo.toUpperCase();
+    var conta= String(row[7]||'').trim();
+    var data = String(row[1]||'').trim();
+    var item = {doc:doc,nfse:nfse,nome:nome,valor:valor,memo:memo,conta:conta,data:data};
+    var memoMes = memoUp.match(/(\d{2})\.?(\d{4})/);
+    var memoMesNum = memoMes ? memoMes[1] : '';
+    if(memoUp.indexOf('PIS_COFINS S/ RECEITAS')>=0||memoUp.indexOf('PIS/COFINS S/ RECEITAS')>=0) {
+      if(!mesRef||memoMesNum===mesRef) result.recFin.push(item);
+    } else if(memoUp.indexOf('TRANSFERENCIA SALDO CREDOR')>=0||memoUp.indexOf('SALDO CREDOR')>=0) {
+      if(!mesRef||memoMesNum===mesRef) result.transf.push(item);
+    } else if(nfse||(doc&&/^\d+$/.test(doc.replace(/\D/g,'')))) {
+      result.nfs.push(item);
+    }
+  });
+  return result;
+}
+
+function conciliar(HIST, mes, razaoData) {
+  var m=HIST[mes]; if(!m) return null;
+  var resultNfs=(m.nfse||[]).map(function(nf){
+    var found=razaoData.nfs.find(function(r){return r.nfse===nf.nf||r.doc===nf.nf;});
+    return {nf:nf.nf,tomador:nf.tomador,valor:nf.valor,regime:nf.regime,
+            status:found?'ok':'pendente',razaoNfse:found?found.nfse:null};
+  });
+  var rfPis=m.recFin.pis||0,rfCof=m.recFin.cof||0;
+  var rfImpostos=rfPis+rfCof;
+  var rfLancado=razaoData.recFin.reduce(function(s,r){return s+Math.abs(r.valor);},0);
+  var rfStatus=razaoData.recFin.length===0?'pendente':(Math.abs(rfImpostos-rfLancado)<1?'ok':'divergente');
+  var transfPis=(m.darfPisCum||0)+(m.darfPisNC||0);
+  var transfCof=(m.darfCofCum||0)+(m.darfCofNC||0);
+  var transfEsp=transfPis+transfCof;
+  var transfLanc=razaoData.transf.reduce(function(s,r){return s+Math.abs(r.valor);},0);
+  var transfStatus=razaoData.transf.length===0?'pendente':(Math.abs(transfEsp-transfLanc)<1?'ok':'divergente');
+  var numer=m.fat.nc+m.fat.exp+(m.recFin.total||0);
+  var denom=m.fat.cum+m.fat.nc+m.fat.exp+(m.recFin.total||0);
+  var fator=denom?numer/denom:0;
+  var credPis=(m.cred.pisTot||0)*fator,credCof=(m.cred.cofTot||0)*fator;
+  var darfCheck=[
+    {label:'PIS NC (cod.6912)',calc:Math.max(0,(m.fat.pisNC||0)+(m.recFin.pis||0)-credPis),apurado:m.darfPisNC},
+    {label:'COFINS NC (cod.5856)',calc:Math.max(0,(m.fat.cofNC||0)+(m.recFin.cof||0)-credCof),apurado:m.darfCofNC},
+    {label:'PIS CUM (cod.8109)',calc:Math.max(0,(m.fat.pisCum||0)-(m.ret&&m.ret.pis||0)),apurado:m.darfPisCum},
+    {label:'COFINS CUM (cod.2172)',calc:Math.max(0,(m.fat.cofCum||0)-(m.ret&&m.ret.cof||0)),apurado:m.darfCofCum},
+  ];
+  darfCheck.forEach(function(d){d.ok=Math.abs(d.calc-(d.apurado||0))<0.10;});
+  return {nfs:resultNfs,rfImpostos:rfImpostos,rfLancado:rfLancado,rfStatus:rfStatus,rfItems:razaoData.recFin,
+          transfEsp:transfEsp,transfLanc:transfLanc,transfStatus:transfStatus,transfItems:razaoData.transf,
+          darfCheck:darfCheck,fator:fator};
+}
+
+function statusBadge(st){
+  if(st==='ok') return '<span style="background:#D4EDDA;color:#1A7340;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">✅ OK</span>';
+  if(st==='pendente') return '<span style="background:#FFF3CD;color:#7A5A00;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">⏳ Pendente</span>';
+  return '<span style="background:#FADBD8;color:#922B21;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">⚠️ Divergente</span>';
+}
+
+function step4() {
+  var m=HIST[S.mes];
+  if(!m) return '<div class="card"><div class="card-body"><p style="color:#888">Selecione um mês.</p></div></div>';
+  if(['Jan','Fev','Mar','Abr'].indexOf(S.mes)>=0) {
+    return '<div class="card"><div class="card-hdr"><div class="card-title">📒 Razão Contábil — '+m.mesRef+'</div></div>'+
+      '<div class="card-body" style="text-align:center;padding:40px 20px">'+
+      '<div style="font-size:32px;margin-bottom:12px">📋</div>'+
+      '<div style="font-size:14px;font-weight:600;color:#001F5B;margin-bottom:8px">Razão não disponível para '+m.mesRef+'</div>'+
+      '<div style="font-size:12px;color:#888">Disponível a partir de Maio/2026.</div>'+
+      '</div></div>';
+  }
+  if(!RAZAO_ROWS||RAZAO_ROWS.length<2) {
+    return '<div class="card"><div class="card-hdr"><div class="card-title">📒 Razão Contábil — '+m.mesRef+'</div></div>'+
+      '<div class="card-body" style="text-align:center;padding:40px 20px">'+
+      '<div style="font-size:32px;margin-bottom:12px">📋</div>'+
+      '<div style="font-size:13px;color:#888">Dados do razão não carregados.<br>Clique em <strong>🔄 Atualizar</strong>.</div>'+
+      '</div></div>';
+  }
+  var razaoData=processRazao(RAZAO_ROWS,S.mes);
+  var conc=conciliar(HIST,S.mes,razaoData); if(!conc) return '';
+  var nfOk=conc.nfs.filter(function(n){return n.status==='ok';}).length;
+  var darfOk=conc.darfCheck.filter(function(d){return d.ok;}).length;
+  var h2='';
+  // KPIs
+  h2+='<div class="kpi-grid">'+
+    '<div class="kpi '+(conc.nfs.length-nfOk===0?'k-green':'k-red')+'"><div class="kl">NFS-e Conciliadas</div><div class="kv">'+nfOk+'/'+conc.nfs.length+'</div></div>'+
+    '<div class="kpi '+(conc.rfStatus==='ok'?'k-green':conc.rfStatus==='pendente'?'k-orange':'k-red')+'"><div class="kl">Rec. Financeira</div><div class="kv">'+statusBadge(conc.rfStatus)+'</div></div>'+
+    '<div class="kpi '+(conc.transfStatus==='ok'?'k-green':conc.transfStatus==='pendente'?'k-orange':'k-red')+'"><div class="kl">Transf. Saldo Credor</div><div class="kv">'+statusBadge(conc.transfStatus)+'</div></div>'+
+    '<div class="kpi '+(darfOk===conc.darfCheck.length?'k-green':'k-red')+'"><div class="kl">DARFs Conferidos</div><div class="kv">'+darfOk+'/'+conc.darfCheck.length+'</div></div>'+
+    '</div>';
+  // NFS-e
+  h2+='<div class="card"><div class="card-hdr"><div class="card-title">📋 Conciliação NFS-e — '+m.mesRef+'</div></div><div class="card-body tw">'+
+    '<table class="ap"><thead><tr>'+
+    '<th class="tdesc" style="background:#001F5B;text-align:left">NF / N°NFSE</th>'+
+    '<th class="tdesc" style="background:#001F5B;text-align:left;min-width:160px">Tomador</th>'+
+    '<th style="background:#001F5B;color:#fff;text-align:center">Regime</th>'+
+    '<th style="background:#001F5B;color:#fff;text-align:center">Status</th>'+
+    '<th style="background:#001F5B;color:#fff">Doc Razão</th>'+
+    '</tr></thead><tbody>';
+  conc.nfs.forEach(function(nf,i){
+    var cls=nf.regime==='Cumulativo'?'regime-cum':nf.regime==='Exportação'?'regime-exp':'regime-nc';
+    var bg=nf.status==='ok'?(i%2?'#F0FBF4':'#E6F7ED'):(i%2?'#FEF9EC':'#FEF3CD');
+    h2+='<tr style="background:'+bg+'">'+
+      '<td style="font-weight:600;color:#001F5B">'+nf.nf+'</td>'+
+      '<td>'+nf.tomador.substring(0,22)+(nf.tomador.length>22?'…':'')+'</td>'+
+      '<td style="text-align:center"><span class="'+cls+'">'+nf.regime+'</span></td>'+
+      '<td style="text-align:center">'+statusBadge(nf.status)+'</td>'+
+      '<td style="color:#888;font-size:10px">'+(nf.razaoNfse||'—')+'</td></tr>';
+  });
+  h2+='</tbody></table></div></div>';
+  // Receita Financeira
+  h2+='<div class="card"><div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between">'+
+    '<div class="card-title">📈 Rec. Financeira — Impostos</div>'+statusBadge(conc.rfStatus)+'</div><div class="card-body">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS Esperado</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(m.recFin.pis)+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">COFINS Esperado</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(m.recFin.cof)+'</div></div>'+
+    '<div style="background:'+(conc.rfStatus==='ok'?'#D4EDDA':'#FEF9EC')+';border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Lançado no Razão</div><div style="font-size:14px;font-weight:700;color:'+(conc.rfStatus==='ok'?'#1A7340':'#856404')+'">'+BRL(conc.rfLancado)+'</div></div>'+
+    '</div>';
+  if(conc.rfItems.length){
+    h2+='<table class="inner"><thead><tr><th style="text-align:left">Doc</th><th style="text-align:left">N°NFSE</th><th style="text-align:left">Memorando</th><th>Valor</th></tr></thead><tbody>';
+    conc.rfItems.forEach(function(r,i){h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td>'+r.doc+'</td><td>'+r.nfse+'</td><td style="font-size:10px;color:#666">'+r.memo+'</td><td>'+BRL(r.valor)+'</td></tr>';});
+    h2+='</tbody></table>';
+  } else h2+='<div style="padding:10px;background:#FEF9EC;border-radius:6px;font-size:12px;color:#856404">⏳ Nenhum lançamento encontrado para o mês '+S.mes+'.</div>';
+  h2+='</div></div>';
+  // Transferência
+  h2+='<div class="card"><div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between">'+
+    '<div class="card-title">🔄 Transf. Saldo Credor PIS/COFINS</div>'+statusBadge(conc.transfStatus)+'</div><div class="card-body">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS+COFINS Esperado</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(conc.transfEsp)+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS: '+BRL((m.darfPisCum||0)+(m.darfPisNC||0))+' · COF: '+BRL((m.darfCofCum||0)+(m.darfCofNC||0))+'</div><div style="font-size:11px;color:#888">Separados</div></div>'+
+    '<div style="background:'+(conc.transfStatus==='ok'?'#D4EDDA':conc.transfStatus==='pendente'?'#FEF9EC':'#FADBD8')+';border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Lançado no Razão</div><div style="font-size:14px;font-weight:700;color:'+(conc.transfStatus==='ok'?'#1A7340':conc.transfStatus==='pendente'?'#856404':'#922B21')+'">'+BRL(conc.transfLanc)+'</div></div>'+
+    '</div>';
+  if(conc.transfItems.length){
+    h2+='<table class="inner"><thead><tr><th style="text-align:left">Doc</th><th style="text-align:left">N°NFSE</th><th style="text-align:left">Memorando</th><th>Valor</th></tr></thead><tbody>';
+    conc.transfItems.forEach(function(r,i){h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td>'+r.doc+'</td><td>'+r.nfse+'</td><td style="font-size:10px;color:#666">'+r.memo+'</td><td>'+BRL(r.valor)+'</td></tr>';});
+    h2+='</tbody></table>';
+  } else h2+='<div style="padding:10px;background:#FEF9EC;border-radius:6px;font-size:12px;color:#856404">⏳ Nenhum lançamento encontrado.</div>';
+  h2+='</div></div>';
+  // DARFs
+  h2+='<div class="card"><div class="card-hdr"><div class="card-title">💳 Conciliação DARFs — Verificação</div></div><div class="card-body">'+
+    '<div style="font-size:11px;color:#666;margin-bottom:12px;padding:8px 12px;background:#EEF1F8;border-radius:6px">Fator rateio: <strong>'+Math.round(conc.fator*10000)/100+'%</strong></div>'+
+    '<table class="ap"><thead><tr>'+
+    '<th class="tdesc" style="background:#001F5B;text-align:left">Tributo</th>'+
+    '<th style="background:#001F5B;color:#fff">Calculado</th>'+
+    '<th style="background:#001F5B;color:#fff">Apurado (DARF)</th>'+
+    '<th style="background:#001F5B;color:#fff">Diferença</th>'+
+    '<th style="background:#001F5B;color:#fff;text-align:center">Status</th>'+
+    '</tr></thead><tbody>';
+  conc.darfCheck.forEach(function(d,i){
+    var diff=Math.abs(d.calc-(d.apurado||0));
+    var bg=d.ok?(i%2?'#F0FBF4':'#E6F7ED'):(i%2?'#FEF9EC':'#FEF3CD');
+    h2+='<tr style="background:'+bg+'"><td style="font-weight:600">'+d.label+'</td>'+
+      '<td>'+BRL(d.calc)+'</td><td>'+BRL(d.apurado||0)+'</td>'+
+      '<td style="color:'+(diff<0.10?'#1A7340':'#922B21')+'">'+BRL(diff)+'</td>'+
+      '<td style="text-align:center">'+statusBadge(d.ok?'ok':'divergente')+'</td></tr>';
+  });
+  h2+='</tbody></table></div></div>';
+  // Raw razão
+  var uid='razao_raw_'+S.mes;
+  h2+='<div class="inner-toggle"><div class="inner-hdr" data-uid="'+uid+'" onclick="itoggle(this.dataset.uid)">'+
+    '<span class="inner-hdr-title">📄 Todos os lançamentos — '+RAZAO_ROWS.length+' linhas</span>'+
+    '<span class="inner-meta"><span id="'+uid+'_ar" style="font-size:13px;color:#001F5B">▶</span></span>'+
+    '</div><div class="inner-body" id="'+uid+'" style="overflow-x:auto">'+
+    '<table class="inner"><thead><tr><th style="text-align:left">Data</th><th style="text-align:left">Doc</th>'+
+    '<th style="text-align:left">N°NFSE</th><th style="text-align:left;min-width:130px">Nome</th>'+
+    '<th>Valor</th><th style="text-align:left;min-width:150px">Memorando</th><th style="text-align:left">Conta</th>'+
+    '</tr></thead><tbody>';
+  RAZAO_ROWS.slice(1).forEach(function(row,i){
+    if(!row[1]) return;
+    h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td style="font-size:10px">'+String(row[1]||'')+'</td>'+
+      '<td style="font-size:10px;color:#001F5B;font-weight:600">'+String(row[2]||'')+'</td>'+
+      '<td style="font-size:10px;color:#185FA5">'+String(row[3]||'')+'</td>'+
+      '<td>'+String(row[4]||'').substring(0,20)+'</td>'+
+      '<td>'+BRL(tf(row[5]))+'</td>'+
+      '<td style="font-size:10px;color:#666">'+String(row[6]||'').substring(0,35)+'</td>'+
+      '<td style="font-size:10px;color:#888">'+String(row[7]||'').substring(0,20)+'</td></tr>';
+  });
+  h2+='</tbody></table></div></div>';
+  return h2;
+}
 
 buildSidebar(); updateHeader(); render();
 
