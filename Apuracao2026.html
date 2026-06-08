@@ -647,7 +647,7 @@ async function syncSheets() {
     var meses=Object.keys(HIST);
     if(meses.length){S.mes=meses[meses.length-1];}
     document.getElementById('lastSync').textContent='Atualizado: '+new Date().toLocaleTimeString('pt-BR');
-    
+    buildSidebar(); updateHeader(); render();
     showStatus('✅ Dados atualizados — '+meses.length+' meses carregados');
   } catch(err){
     console.error(err);
@@ -1401,7 +1401,10 @@ function render() {
 }
 
 
-
+// Inicializa HIST com dados base para o sidebar aparecer imediatamente
+HIST = Object.assign({}, HIST_BASE);
+var _initMeses = Object.keys(HIST);
+if(_initMeses.length){ S.mes = _initMeses[_initMeses.length-1]; }
 buildSidebar(); updateHeader(); render();
 </script>
 
