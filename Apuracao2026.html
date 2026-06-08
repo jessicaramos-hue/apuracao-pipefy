@@ -1578,9 +1578,12 @@ function conciliar(HIST, mes, razaoData) {
   var rfLancado=razaoData.recFin.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var rfStatus=razaoData.recFin.length===0?'pendente':(Math.abs(rfImpostos-rfLancado)<1?'ok':'divergente');
   // 3. Transf. Saldo Credor — comparar PIS+COFINS a pagar
-  var transfPis=(m.darfPisCum||0)+(m.darfPisNC||0);
-  var transfCof=(m.darfCofCum||0)+(m.darfCofNC||0);
-  var transfEsp=transfPis+transfCof;
+  // Transf. inclui PIS+COFINS NC + Retenção CUM (transferida para saldo credor)
+  var transfPisNC = m.darfPisNC||0;
+  var transfCofNC = m.darfCofNC||0;
+  var transfPisCum = m.darfPisCum||0;
+  var transfCofCum = m.darfCofCum||0;
+  var transfEsp = transfPisNC + transfCofNC + transfPisCum + transfCofCum;
   var transfLanc=razaoData.transf.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var transfStatus=razaoData.transf.length===0?'pendente':(Math.abs(transfEsp-transfLanc)<1?'ok':'divergente');
   // 4. Conferência DARFs — soma notas - créditos = DARF
@@ -1754,86 +1757,149 @@ function exportBook() {
   var numer=m.fat.nc+m.fat.exp+(m.recFin.total||0);
   var denom=m.fat.cum+m.fat.nc+m.fat.exp+(m.recFin.total||0);
   var fator=denom?numer/denom:0;
+
+  // Helper styles
+  function aoa(data){ return XLSX.utils.aoa_to_sheet(data); }
+
   // 1. Base Lei
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
-    ["Item","Descrição","Regime","Alíq. PIS","Alíq. COFINS","Base ISS"],
-    ["1.05","Desenvolvimento e licenciamento de programas","Não Cumulativo","1,65%","7,60%","Sim"],
-    ["1.07","Suporte técnico e outros serviços em TI","Cumulativo","0,65%","3,00%","Sim"],
-    ["1.06","Licenciamento — Exportação","Exportação","—","—","Não"],
-    ["1.03","Processamento de dados — Exportação","Exportação","—","—","Não"],
-    ["17.01","Consultoria — Exportação","Exportação","—","—","Não"],
-  ]),"1. Base Serviços Lei");
+  var s1=aoa([
+    ["BASE DE SERVIÇOS — LEI 10.637/2002 e 10.833/2003"],
+    [],
+    ["Item","Descrição","Regime","Alíq. PIS","Alíq. COFINS","Base ISS","Alíq. ISS","Observação"],
+    ["1.05","Desenvolvimento e licenciamento de programas customizáveis","Não Cumulativo","1,65%","7,60%","Sim","5,00%","Lei 10.833/03"],
+    ["1.07","Suporte técnico e outros serviços em TI","Cumulativo","0,65%","3,00%","Sim","5,00%","Lei 10.637/02"],
+    ["1.06","Licenciamento — Exportação","Exportação","—","—","Não","—","Imune"],
+    ["1.03","Processamento de dados — Exportação","Exportação","—","—","Não","—","Imune"],
+    ["17.01","Consultoria — Exportação","Exportação","—","—","Não","—","Imune"],
+  ]);
+  s1['!cols']=[{wch:8},{wch:50},{wch:22},{wch:12},{wch:12},{wch:10},{wch:10},{wch:25}];
+  XLSX.utils.book_append_sheet(wb,s1,"1 BASE DE SERVIÇOS_LEI");
+
   // 1.1 Faturamento
-  var fatRows=[["NF","Data","Tomador","CNPJ","Valor Bruto","Item","Regime","ISS","PIS","COFINS","INSS","IR Ret.","Mês"]];
-  (m.nfse||[]).forEach(function(nf){fatRows.push([nf.nf,nf.data,nf.tomador,nf.cnpj,nf.valor,nf.item,nf.regime,nf.iss,nf.pisCum||nf.pisNC,nf.cofCum||nf.cofNC,nf.inss,nf.ir||0,m.mesRef]);});
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(fatRows),"1.1 Faturamento");
+  var fatData=[["NF","Data","Tomador","CNPJ","Valor Bruto","Item","Regime","ISS (5%)","PIS","COFINS","INSS (2,7%)","IR Ret.","CSRF","IBS","CBS","Mês"]];
+  (m.nfse||[]).forEach(function(nf){
+    fatData.push([nf.nf,nf.data,nf.tomador,nf.cnpj,nf.valor,nf.item,nf.regime,
+      nf.iss,nf.pisCum||nf.pisNC,nf.cofCum||nf.cofNC,nf.inss,nf.ir||0,nf.csrf||0,nf.ibs||0,nf.cbs||0,m.mesRef]);
+  });
+  var totRow=["TOTAL","","","",
+    (m.nfse||[]).reduce(function(s,n){return s+n.valor;},0),"","",
+    m.fat.iss||0,m.fat.pisNC+m.fat.pisCum,m.fat.cofNC+m.fat.cofCum,m.fat.inss||0,"","","","",""
+  ];
+  fatData.push(totRow);
+  var s11=aoa([
+    ["FATURAMENTO"],
+    ["PIPEFY MARKETING E TECNOLOGIA LTDA — CNPJ: 20.504.074/0001-72"],
+    [],
+  ].concat(fatData));
+  s11['!cols']=[{wch:8},{wch:12},{wch:32},{wch:18},{wch:14},{wch:8},{wch:16},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:10},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,s11,"1.1 FATURAMENTO");
+
   // 2. Receitas Financeiras
-  var rfRows=[["Mês","Conta","Descrição","Valor Base","PIS (0,65%)","COFINS (4,00%)","Total Débito"]];
-  (m.recFin.porConta||[]).forEach(function(pc){rfRows.push([m.mesRef,pc.conta,pc.nome||pc.conta,pc.valor,pc.valor*0.0065,pc.valor*0.04,pc.valor*0.0465]);});
-  rfRows.push(["TOTAL","","",m.recFin.total,m.recFin.pis,m.recFin.cof,m.recFin.pis+m.recFin.cof]);
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rfRows),"2. Receitas Financeiras");
+  var rfData=[["Mês","Conta","Descrição","Valor Base","PIS (0,65%)","COFINS (4,00%)","Total Débito"]];
+  (m.recFin.porConta||[]).forEach(function(pc){
+    rfData.push([m.mesRef,pc.conta,pc.nome||pc.conta,pc.valor,Math.round(pc.valor*0.0065*100)/100,Math.round(pc.valor*0.04*100)/100,Math.round(pc.valor*0.0465*100)/100]);
+  });
+  rfData.push(["TOTAL","","",m.recFin.total,m.recFin.pis,m.recFin.cof,m.recFin.pis+m.recFin.cof]);
+  var s2=aoa([["RECEITAS FINANCEIRAS"],["Conta 3.3.02.02 — PIS 0,65% · COFINS 4,00%"],[],].concat(rfData));
+  s2['!cols']=[{wch:12},{wch:25},{wch:32},{wch:16},{wch:15},{wch:15},{wch:15}];
+  XLSX.utils.book_append_sheet(wb,s2,"2.RECEITAS FINANCEIRAS");
+
   // 3. Créditos
-  var credRows=[["Mês","Tipo","Fornecedor","NF/Doc","Base Cálculo","PIS (1,65%)","COFINS (7,60%)","Total"]];
-  (m.cred.itens||[]).forEach(function(it){credRows.push([m.mesRef,it.tipo,it.nome,it.doc||'',it.base,it.pis,it.cof,it.pis+it.cof]);});
+  var credData=[["Mês","Tipo","Fornecedor","NF/Doc","Base de Cálculo","PIS (1,65%)","COFINS (7,60%)","Total Crédito","Alerta"]];
+  (m.cred.itens||[]).forEach(function(it){
+    credData.push([m.mesRef,it.tipo,it.nome,it.doc||'',it.base,it.pis,it.cof,it.pis+it.cof,it.alerta?'⚠️':'']);
+  });
   var dep=m.cred.dep||{};
-  if(dep.maq) credRows.push([m.mesRef,'Depreciação','Máquinas e Equipamentos','',dep.maq,dep.pisMaq,dep.cofMaq,dep.pisMaq+dep.cofMaq]);
-  if(dep.comp) credRows.push([m.mesRef,'Depreciação','Computadores','',dep.comp,dep.pisComp,dep.cofComp,dep.pisComp+dep.cofComp]);
-  if(dep.soft) credRows.push([m.mesRef,'Depreciação','Softwares','',dep.soft,dep.pisSoft,dep.cofSoft,dep.pisSoft+dep.cofSoft]);
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(credRows),"3. Entradas - Créditos");
+  if(dep.maq) credData.push([m.mesRef,'Depreciação Máquinas','Máquinas e Equipamentos','',dep.maq,dep.pisMaq,dep.cofMaq,dep.pisMaq+dep.cofMaq,'']);
+  if(dep.comp) credData.push([m.mesRef,'Depreciação Computadores','Computadores','',dep.comp,dep.pisComp,dep.cofComp,dep.pisComp+dep.cofComp,'']);
+  if(dep.soft) credData.push([m.mesRef,'Amortização Softwares','Softwares','',dep.soft,dep.pisSoft,dep.cofSoft,dep.pisSoft+dep.cofSoft,'']);
+  credData.push(["TOTAL","","","",
+    (credData.slice(1).reduce(function(s,r){return s+(r[4]||0);},0)),
+    m.cred.pisTot,m.cred.cofTot,m.cred.pisTot+m.cred.cofTot,""
+  ]);
+  var s3=aoa([["CRÉDITOS TRIBUTÁRIOS"],["Lei 10.833/03 art.3º — Aluguel · Energia · Depreciação"],[],].concat(credData));
+  s3['!cols']=[{wch:12},{wch:18},{wch:35},{wch:12},{wch:16},{wch:14},{wch:14},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,s3,"3.ENTRADAS -CREDITOS");
+
   // 3.1 Rateio
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
-    ["Mês","Fat. Cumulativo","Fat. NC","Exportação","Rec. Financeira","Denominador","Numerador","Fator Rateio","Créd. PIS Bruto","Créd. PIS Utilizável","Créd. COFINS Bruto","Créd. COFINS Utilizável"],
-    [m.mesRef,m.fat.cum,m.fat.nc,m.fat.exp,m.recFin.total,denom,numer,fator,m.cred.pisTot,m.cred.pisTot*fator,m.cred.cofTot,m.cred.cofTot*fator],
-  ]),"3.1 Rateio Créditos");
+  var s31=aoa([
+    ["RATEIO CRÉDITOS TRIBUTÁRIOS"],
+    ["Art. 3º §8º Lei 10.833/2003"],
+    [],
+    ["* Fórmula: Fator = (Receita NC + Exportação + Rec. Financeira) ÷ (Receita Total + Rec. Financeira)"],
+    [],
+    ["Mês","Fat. Cumulativo","Fat. NC","Exportação","Rec. Financeira","Denominador","Numerador","Fator Rateio","Créd. Bruto PIS","Créd. PIS Utilizável","Créd. Bruto COFINS","Créd. COFINS Utilizável"],
+    [m.mesRef,m.fat.cum,m.fat.nc,m.fat.exp,m.recFin.total,denom,numer,fator,
+     m.cred.pisTot,Math.round(m.cred.pisTot*fator*100)/100,
+     m.cred.cofTot,Math.round(m.cred.cofTot*fator*100)/100],
+  ]);
+  s31['!cols']=[{wch:12},{wch:14},{wch:14},{wch:13},{wch:14},{wch:14},{wch:13},{wch:12},{wch:14},{wch:14},{wch:15},{wch:15}];
+  XLSX.utils.book_append_sheet(wb,s31,"3.1 RATEIO DOS CREDITOS");
+
   // 4. Razão
-  var razaoSheet=[["Data","Doc","N°NFSE","Nome","Valor","Memorando","Conta"]];
-  if(RAZAO_ROWS&&RAZAO_ROWS.length>1) RAZAO_ROWS.slice(1).forEach(function(r){if(r[1])razaoSheet.push([r[1],r[2],r[3],r[4],r[5],r[6],r[7]]);});
-  else razaoSheet.push(["Em implementação","","","","","",""]);
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(razaoSheet),"4. Razão Contábil");
+  var razaoData=[["Data","Tipo","Nº Documento","N°NFSE","Nome","Valor","Memorando","Conta"]];
+  if(RAZAO_ROWS&&RAZAO_ROWS.length>1) {
+    RAZAO_ROWS.slice(1).forEach(function(r){if(r[1])razaoData.push([r[1],r[0],r[2],r[3],r[4],r[5],r[6],r[7]]);});
+  } else {
+    razaoData.push(["Dados não disponíveis","","","","","","",""]);
+  }
+  var s4=aoa([["RAZÃO CONTÁBIL"],["Lançamentos PIS/COFINS"],[],].concat(razaoData));
+  s4['!cols']=[{wch:12},{wch:15},{wch:15},{wch:10},{wch:30},{wch:14},{wch:40},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,s4,"4. RAZÃO - CONTÁBIL");
+
   // 5. Retenções
-  var retRows=[["NFS-e","Data","Tomador","CNPJ","Valor NF","PIS Retido","COFINS Retido","Total"]];
-  (m.ret&&m.ret.nfs||[]).forEach(function(r){retRows.push([r.nfse,r.data,r.tomador,r.cnpj,r.valor,r.pisRet||0,r.cofRet||0,(r.pisRet||0)+(r.cofRet||0)]);});
-  retRows.push(["TOTAL","","","","",m.ret&&m.ret.pis||0,m.ret&&m.ret.cof||0,(m.ret&&m.ret.pis||0)+(m.ret&&m.ret.cof||0)]);
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(retRows),"5. Retenção Faturamento");
+  var retData=[["NÚMERO","DATA EMISSÃO","VALOR","IRRF RETIDO","PIS","COFINS","CSLL","VALOR RECEBIDO","DATA PGTO","Compensado PIS","Compensado COFINS","CNPJ TOMADOR","TOMADOR"]];
+  (m.ret&&m.ret.nfs||[]).forEach(function(r){
+    retData.push([r.nfse,r.data,r.valor,0,r.pisRet||0,r.cofRet||0,0,0,'','','',r.cnpj,r.tomador]);
+  });
+  retData.push(["TOTAL","","","",m.ret&&m.ret.pis||0,m.ret&&m.ret.cof||0,"","","","","",""]);
+  var s5=aoa(retData);
+  s5['!cols']=[{wch:10},{wch:13},{wch:14},{wch:13},{wch:12},{wch:12},{wch:12},{wch:14},{wch:15},{wch:14},{wch:15},{wch:18},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,s5,"6.1 RETENÇÃO FATURAMENTO");
+
   // 6. Apuração Consolidada
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
-    ["APURAÇÃO CONSOLIDADA — "+m.mesRef,""],
+  var apData=[
+    ["PIS / COFINS",""],
     ["PIPEFY MARKETING E TECNOLOGIA LTDA — CNPJ: 20.504.074/0001-72",""],
     ["",""],
-    ["FATURAMENTO",""],
+    ["DÉBITOS",""],
     ["Faturamento Total",m.fat.total],
     ["└ Regime Cumulativo (1.07)",m.fat.cum],
     ["└ Regime Não Cumulativo (1.05)",m.fat.nc],
     ["└ Exportação (A100)",m.fat.exp],
-    ["",""],
-    ["RECEITAS FINANCEIRAS",""],
-    ["Total Receitas Financeiras",m.recFin.total],
-    ["PIS s/ Rec. Financeira (0,65%)",m.recFin.pis],
-    ["COFINS s/ Rec. Financeira (4,00%)",m.recFin.cof],
+    ["Receitas Financeiras (base)",m.recFin.total],
+    ["PIS Débito Total",m.totDebPis],
+    ["COFINS Débito Total",m.totDebCof],
+    ["ISS (5%)",m.iss],
+    ["INSS Desoneração (2,7%)",m.inss],
     ["",""],
     ["CRÉDITOS (pós-rateio "+Math.round(fator*10000)/100+"%)",""],
     ["Fator de Rateio",fator],
     ["Crédito PIS Bruto",m.cred.pisTot],
-    ["Crédito PIS Utilizável (pós-rateio)",m.cred.pisTot*fator],
+    ["Crédito PIS Utilizável",Math.round(m.cred.pisTot*fator*100)/100],
     ["Crédito COFINS Bruto",m.cred.cofTot],
-    ["Crédito COFINS Utilizável (pós-rateio)",m.cred.cofTot*fator],
+    ["Crédito COFINS Utilizável",Math.round(m.cred.cofTot*fator*100)/100],
     ["",""],
     ["RETENÇÕES NA FONTE",""],
-    ["PIS Retido",m.ret&&m.ret.pis||0],
-    ["COFINS Retido",m.ret&&m.ret.cof||0],
+    ["PIS Retido na Fonte",m.ret&&m.ret.pis||0],
+    ["COFINS Retido na Fonte",m.ret&&m.ret.cof||0],
     ["",""],
     ["DARFs A PAGAR",""],
-    ["PIS Cumulativo (cod.8109)",m.darfPisCum],
-    ["PIS Não Cumulativo (cod.6912)",m.darfPisNC],
-    ["COFINS Cumulativo (cod.2172)",m.darfCofCum],
-    ["COFINS Não Cumulativo (cod.5856)",m.darfCofNC],
+    ["PIS Cumulativo (cod. 8109) — líq. retenção",m.darfPisCum],
+    ["PIS Não Cumulativo (cod. 6912) — líq. crédito",m.darfPisNC],
+    ["COFINS Cumulativo (cod. 2172) — líq. retenção",m.darfCofCum],
+    ["COFINS Não Cumulativo (cod. 5856) — líq. crédito",m.darfCofNC],
     ["ISS — DAM Prefeitura",m.iss],
-    ["INSS Desoneração (cod.2985)",m.inss],
+    ["INSS Desoneração (cod. 2985)",m.inss],
     ["",""],
     ["TOTAL GERAL A RECOLHER",m.total],
-  ]),"6. Apuração Consolidada");
+  ];
+  var s6=aoa(apData);
+  s6['!cols']=[{wch:42},{wch:18}];
+  XLSX.utils.book_append_sheet(wb,s6,"5.APURAÇÃO CONSOLIDADA");
+
   XLSX.writeFile(wb,'Book_Apuracao_'+m.mesRef.replace('/','_')+'.xlsx');
-  showStatus('📒 Book baixado com sucesso!');
+  showStatus('📒 Book gerado: Book_Apuracao_'+m.mesRef.replace('/','_')+'.xlsx');
 }
 
 buildSidebar(); updateHeader(); render();
