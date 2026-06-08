@@ -1336,7 +1336,10 @@ function step3() {
   var m=HIST[S.mes];
   if(!m) return '<div class="card"><div class="card-body"><p style="color:#888">Selecione um mês.</p></div></div>';
   return '<div class="card"><div class="card-hdr"><div class="card-title">📥 Exportar — '+m.mesRef+'</div></div><div class="card-body">' +
-    '<div style="display:flex;gap:8px;margin-bottom:14px"><button class="btn btn-gold" onclick="exportCSV()">📥 Baixar CSV</button></div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+    '<button class="btn btn-gold" onclick="exportCSV()">📥 Baixar CSV</button>'+
+    '<button class="btn" style="background:#001F5B;color:#fff" onclick="exportBook()">📒 Baixar Book XLSX</button>'+
+    '</div>' +
     '<div style="padding:12px;background:#F5F6FA;border-radius:7px;font-size:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px">' +
     '<span>Faturamento: <strong>'+BRL(m.fat.total)+'</strong></span>' +
     '<span>Rec. Financeiras: <strong>'+BRL(m.recFin.total)+'</strong></span>' +
@@ -1532,25 +1535,27 @@ function processRazao(rows, mes) {
   var result={nfs:[],recFin:[],transf:[],outros:[]};
   if(!rows||rows.length<2) return result;
   var mesNum={Jan:'01',Fev:'02',Mar:'03',Abr:'04',Mai:'05',Jun:'06',Jul:'07',Ago:'08',Set:'09',Out:'10',Nov:'11',Dez:'12'};
-  var mesRef = mesNum[mes]||'';
+  var mesRef=mesNum[mes]||'';
   rows.slice(1).forEach(function(row){
     if(!row[1]) return;
-    var doc  = String(row[2]||'').trim();
-    var nfse = String(row[3]||'').trim();
-    var nome = String(row[4]||'').trim();
-    var valor= tf(row[5]);
-    var memo = String(row[6]||'').trim();
-    var memoUp = memo.toUpperCase();
-    var conta= String(row[7]||'').trim();
-    var data = String(row[1]||'').trim();
-    var item = {doc:doc,nfse:nfse,nome:nome,valor:valor,memo:memo,conta:conta,data:data};
-    var memoMes = memoUp.match(/(\d{2})\.?(\d{4})/);
+    // Cols: 0=Tipo|1=Data|2=Nº doc|3=N°NFSE|4=Nome|5=Valor|6=Memorando|7=Conta
+    var doc   = String(row[2]||'').trim();
+    var nfse  = String(row[3]||'').trim();
+    var nome  = String(row[4]||'').trim();
+    var valor = tf(row[5]);
+    var memo  = String(row[6]||'').trim();
+    var memoUp= memo.toUpperCase();
+    var conta = String(row[7]||'').trim();
+    var data  = String(row[1]||'').trim();
+    var item  = {doc:doc,nfse:nfse,nome:nome,valor:valor,memo:memo,conta:conta,data:data};
+    // Filter by month in memorando
+    var memoMes = memoUp.match(/(\d{2})\.(\d{4})/);
     var memoMesNum = memoMes ? memoMes[1] : '';
-    if(memoUp.indexOf('PIS_COFINS S/ RECEITAS')>=0||memoUp.indexOf('PIS/COFINS S/ RECEITAS')>=0) {
+    if(memoUp.indexOf('PIS_COFINS S/ RECEITAS')>=0||memoUp.indexOf('PIS/COFINS S/ RECEITAS')>=0||memoUp.indexOf('PIS _COFINS S/ RECEITAS')>=0) {
       if(!mesRef||memoMesNum===mesRef) result.recFin.push(item);
     } else if(memoUp.indexOf('TRANSFERENCIA SALDO CREDOR')>=0||memoUp.indexOf('SALDO CREDOR')>=0) {
       if(!mesRef||memoMesNum===mesRef) result.transf.push(item);
-    } else if(nfse||(doc&&/^\d+$/.test(doc.replace(/\D/g,'')))) {
+    } else if(nfse) {
       result.nfs.push(item);
     }
   });
@@ -1559,34 +1564,49 @@ function processRazao(rows, mes) {
 
 function conciliar(HIST, mes, razaoData) {
   var m=HIST[mes]; if(!m) return null;
+  // 1. NFS-e — conciliar por N°NFSE
   var resultNfs=(m.nfse||[]).map(function(nf){
-    var found=razaoData.nfs.find(function(r){return r.nfse===nf.nf||r.doc===nf.nf;});
-    return {nf:nf.nf,tomador:nf.tomador,valor:nf.valor,regime:nf.regime,
-            status:found?'ok':'pendente',razaoNfse:found?found.nfse:null};
+    var found=razaoData.nfs.find(function(r){
+      return r.nfse===String(nf.nf)||r.doc===nf.nf||r.doc===('INV'+nf.nf);
+    });
+    return {nf:nf.nf,tomador:nf.tomador,regime:nf.regime,
+            status:found?'ok':'pendente',razaoNfse:found?found.nfse:null,razaoDoc:found?found.doc:null};
   });
-  var rfPis=m.recFin.pis||0,rfCof=m.recFin.cof||0;
+  // 2. Rec. Financeira — comparar PIS+COFINS dos impostos
+  var rfPis=m.recFin.pis||0, rfCof=m.recFin.cof||0;
   var rfImpostos=rfPis+rfCof;
   var rfLancado=razaoData.recFin.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var rfStatus=razaoData.recFin.length===0?'pendente':(Math.abs(rfImpostos-rfLancado)<1?'ok':'divergente');
+  // 3. Transf. Saldo Credor — comparar PIS+COFINS a pagar
   var transfPis=(m.darfPisCum||0)+(m.darfPisNC||0);
   var transfCof=(m.darfCofCum||0)+(m.darfCofNC||0);
   var transfEsp=transfPis+transfCof;
   var transfLanc=razaoData.transf.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var transfStatus=razaoData.transf.length===0?'pendente':(Math.abs(transfEsp-transfLanc)<1?'ok':'divergente');
+  // 4. Conferência DARFs — soma notas - créditos = DARF
   var numer=m.fat.nc+m.fat.exp+(m.recFin.total||0);
   var denom=m.fat.cum+m.fat.nc+m.fat.exp+(m.recFin.total||0);
   var fator=denom?numer/denom:0;
-  var credPis=(m.cred.pisTot||0)*fator,credCof=(m.cred.cofTot||0)*fator;
+  var credPis=(m.cred.pisTot||0)*fator, credCof=(m.cred.cofTot||0)*fator;
+  var calcPisNC  = Math.max(0,(m.fat.pisNC||0)+(m.recFin.pis||0)-credPis);
+  var calcCofNC  = Math.max(0,(m.fat.cofNC||0)+(m.recFin.cof||0)-credCof);
+  var calcPisCum = Math.max(0,(m.fat.pisCum||0)-(m.ret&&m.ret.pis||0));
+  var calcCofCum = Math.max(0,(m.fat.cofCum||0)-(m.ret&&m.ret.cof||0));
   var darfCheck=[
-    {label:'PIS NC (cod.6912)',calc:Math.max(0,(m.fat.pisNC||0)+(m.recFin.pis||0)-credPis),apurado:m.darfPisNC},
-    {label:'COFINS NC (cod.5856)',calc:Math.max(0,(m.fat.cofNC||0)+(m.recFin.cof||0)-credCof),apurado:m.darfCofNC},
-    {label:'PIS CUM (cod.8109)',calc:Math.max(0,(m.fat.pisCum||0)-(m.ret&&m.ret.pis||0)),apurado:m.darfPisCum},
-    {label:'COFINS CUM (cod.2172)',calc:Math.max(0,(m.fat.cofCum||0)-(m.ret&&m.ret.cof||0)),apurado:m.darfCofCum},
+    {label:'PIS NC (cod.6912)', calc:calcPisNC, apurado:m.darfPisNC,
+     formula:'PIS NC faturamento ('+BRL(m.fat.pisNC||0)+') + Rec.Fin. ('+BRL(m.recFin.pis||0)+') − Crédito ('+BRL(credPis)+')'},
+    {label:'COFINS NC (cod.5856)', calc:calcCofNC, apurado:m.darfCofNC,
+     formula:'COFINS NC faturamento ('+BRL(m.fat.cofNC||0)+') + Rec.Fin. ('+BRL(m.recFin.cof||0)+') − Crédito ('+BRL(credCof)+')'},
+    {label:'PIS CUM (cod.8109)', calc:calcPisCum, apurado:m.darfPisCum,
+     formula:'PIS CUM ('+BRL(m.fat.pisCum||0)+') − Retenção ('+BRL(m.ret&&m.ret.pis||0)+')'},
+    {label:'COFINS CUM (cod.2172)', calc:calcCofCum, apurado:m.darfCofCum,
+     formula:'COFINS CUM ('+BRL(m.fat.cofCum||0)+') − Retenção ('+BRL(m.ret&&m.ret.cof||0)+')'},
   ];
   darfCheck.forEach(function(d){d.ok=Math.abs(d.calc-(d.apurado||0))<0.10;});
-  return {nfs:resultNfs,rfImpostos:rfImpostos,rfLancado:rfLancado,rfStatus:rfStatus,rfItems:razaoData.recFin,
+  return {nfs:resultNfs,
+          rfImpostos:rfImpostos,rfLancado:rfLancado,rfStatus:rfStatus,rfItems:razaoData.recFin,
           transfEsp:transfEsp,transfLanc:transfLanc,transfStatus:transfStatus,transfItems:razaoData.transf,
-          darfCheck:darfCheck,fator:fator};
+          darfCheck:darfCheck,fator:fator,credPis:credPis,credCof:credCof};
 }
 
 function statusBadge(st){
@@ -1627,11 +1647,13 @@ function step4() {
     '</div>';
   // NFS-e
   h2+='<div class="card"><div class="card-hdr"><div class="card-title">📋 Conciliação NFS-e — '+m.mesRef+'</div></div><div class="card-body tw">'+
+    '<p style="font-size:11px;color:#666;margin-bottom:10px">Conciliação por N°NFSE — valores não comparados (apenas presença no razão)</p>'+
     '<table class="ap"><thead><tr>'+
-    '<th class="tdesc" style="background:#001F5B;text-align:left">NF / N°NFSE</th>'+
+    '<th class="tdesc" style="background:#001F5B;text-align:left">NF</th>'+
     '<th class="tdesc" style="background:#001F5B;text-align:left;min-width:160px">Tomador</th>'+
     '<th style="background:#001F5B;color:#fff;text-align:center">Regime</th>'+
     '<th style="background:#001F5B;color:#fff;text-align:center">Status</th>'+
+    '<th style="background:#001F5B;color:#fff">N°NFSE Razão</th>'+
     '<th style="background:#001F5B;color:#fff">Doc Razão</th>'+
     '</tr></thead><tbody>';
   conc.nfs.forEach(function(nf,i){
@@ -1642,78 +1664,176 @@ function step4() {
       '<td>'+nf.tomador.substring(0,22)+(nf.tomador.length>22?'…':'')+'</td>'+
       '<td style="text-align:center"><span class="'+cls+'">'+nf.regime+'</span></td>'+
       '<td style="text-align:center">'+statusBadge(nf.status)+'</td>'+
-      '<td style="color:#888;font-size:10px">'+(nf.razaoNfse||'—')+'</td></tr>';
+      '<td style="color:#185FA5;font-size:10px">'+(nf.razaoNfse||'—')+'</td>'+
+      '<td style="color:#888;font-size:10px">'+(nf.razaoDoc||'—')+'</td></tr>';
   });
   h2+='</tbody></table></div></div>';
-  // Receita Financeira
+  // Rec. Financeira
   h2+='<div class="card"><div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between">'+
-    '<div class="card-title">📈 Rec. Financeira — Impostos</div>'+statusBadge(conc.rfStatus)+'</div><div class="card-body">'+
+    '<div class="card-title">📈 Conciliação Rec. Financeira — Impostos ('+S.mes+'/2026)</div>'+statusBadge(conc.rfStatus)+'</div><div class="card-body">'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'+
-    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS Esperado</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(m.recFin.pis)+'</div></div>'+
-    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">COFINS Esperado</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(m.recFin.cof)+'</div></div>'+
-    '<div style="background:'+(conc.rfStatus==='ok'?'#D4EDDA':'#FEF9EC')+';border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Lançado no Razão</div><div style="font-size:14px;font-weight:700;color:'+(conc.rfStatus==='ok'?'#1A7340':'#856404')+'">'+BRL(conc.rfLancado)+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS Esperado (0,65%)</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(m.recFin.pis)+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">COFINS Esperado (4%)</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(m.recFin.cof)+'</div></div>'+
+    '<div style="background:'+(conc.rfStatus==='ok'?'#D4EDDA':'#FEF9EC')+';border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Total Lançado Razão</div><div style="font-size:14px;font-weight:700;color:'+(conc.rfStatus==='ok'?'#1A7340':'#856404')+'">'+BRL(conc.rfLancado)+'</div></div>'+
     '</div>';
   if(conc.rfItems.length){
-    h2+='<table class="inner"><thead><tr><th style="text-align:left">Doc</th><th style="text-align:left">N°NFSE</th><th style="text-align:left">Memorando</th><th>Valor</th></tr></thead><tbody>';
-    conc.rfItems.forEach(function(r,i){h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td>'+r.doc+'</td><td>'+r.nfse+'</td><td style="font-size:10px;color:#666">'+r.memo+'</td><td>'+BRL(r.valor)+'</td></tr>';});
+    h2+='<table class="inner"><thead><tr><th style="text-align:left">Doc</th><th style="text-align:left">N°NFSE</th><th style="text-align:left;min-width:200px">Memorando</th><th>Valor</th></tr></thead><tbody>';
+    conc.rfItems.forEach(function(r,i){h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td>'+r.doc+'</td><td style="color:#185FA5">'+r.nfse+'</td><td style="font-size:10px;color:#666">'+r.memo+'</td><td>'+BRL(r.valor)+'</td></tr>';});
     h2+='</tbody></table>';
-  } else h2+='<div style="padding:10px;background:#FEF9EC;border-radius:6px;font-size:12px;color:#856404">⏳ Nenhum lançamento encontrado para o mês '+S.mes+'.</div>';
+  } else h2+='<div style="padding:10px;background:#FEF9EC;border-radius:6px;font-size:12px;color:#856404">⏳ Nenhum lançamento com memorando "PIS_COFINS S/ RECEITAS FINANCEIRAS '+('0'+(MESES_ALL.indexOf(S.mes)+1)).slice(-2)+'.2026" encontrado.</div>';
   h2+='</div></div>';
-  // Transferência
+  // Transf. Saldo Credor
   h2+='<div class="card"><div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between">'+
-    '<div class="card-title">🔄 Transf. Saldo Credor PIS/COFINS</div>'+statusBadge(conc.transfStatus)+'</div><div class="card-body">'+
+    '<div class="card-title">🔄 Conciliação Transf. Saldo Credor PIS/COFINS ('+S.mes+'/2026)</div>'+statusBadge(conc.transfStatus)+'</div><div class="card-body">'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'+
-    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS+COFINS Esperado</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL(conc.transfEsp)+'</div></div>'+
-    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS: '+BRL((m.darfPisCum||0)+(m.darfPisNC||0))+' · COF: '+BRL((m.darfCofCum||0)+(m.darfCofNC||0))+'</div><div style="font-size:11px;color:#888">Separados</div></div>'+
-    '<div style="background:'+(conc.transfStatus==='ok'?'#D4EDDA':conc.transfStatus==='pendente'?'#FEF9EC':'#FADBD8')+';border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Lançado no Razão</div><div style="font-size:14px;font-weight:700;color:'+(conc.transfStatus==='ok'?'#1A7340':conc.transfStatus==='pendente'?'#856404':'#922B21')+'">'+BRL(conc.transfLanc)+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">PIS a Pagar</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL((m.darfPisCum||0)+(m.darfPisNC||0))+'</div></div>'+
+    '<div style="background:#EEF1F8;border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">COFINS a Pagar</div><div style="font-size:14px;font-weight:700;color:#001F5B">'+BRL((m.darfCofCum||0)+(m.darfCofNC||0))+'</div></div>'+
+    '<div style="background:'+(conc.transfStatus==='ok'?'#D4EDDA':conc.transfStatus==='pendente'?'#FEF9EC':'#FADBD8')+';border-radius:7px;padding:10px 14px"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px">Total Lançado Razão</div><div style="font-size:14px;font-weight:700;color:'+(conc.transfStatus==='ok'?'#1A7340':conc.transfStatus==='pendente'?'#856404':'#922B21')+'">'+BRL(conc.transfLanc)+'</div></div>'+
     '</div>';
   if(conc.transfItems.length){
-    h2+='<table class="inner"><thead><tr><th style="text-align:left">Doc</th><th style="text-align:left">N°NFSE</th><th style="text-align:left">Memorando</th><th>Valor</th></tr></thead><tbody>';
-    conc.transfItems.forEach(function(r,i){h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td>'+r.doc+'</td><td>'+r.nfse+'</td><td style="font-size:10px;color:#666">'+r.memo+'</td><td>'+BRL(r.valor)+'</td></tr>';});
+    h2+='<table class="inner"><thead><tr><th style="text-align:left">Doc</th><th style="text-align:left">N°NFSE</th><th style="text-align:left;min-width:200px">Memorando</th><th>Valor</th></tr></thead><tbody>';
+    conc.transfItems.forEach(function(r,i){h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td>'+r.doc+'</td><td style="color:#185FA5">'+r.nfse+'</td><td style="font-size:10px;color:#666">'+r.memo+'</td><td>'+BRL(r.valor)+'</td></tr>';});
     h2+='</tbody></table>';
-  } else h2+='<div style="padding:10px;background:#FEF9EC;border-radius:6px;font-size:12px;color:#856404">⏳ Nenhum lançamento encontrado.</div>';
+  } else h2+='<div style="padding:10px;background:#FEF9EC;border-radius:6px;font-size:12px;color:#856404">⏳ Nenhum lançamento com memorando "TRANSFERENCIA SALDO CREDOR PIS/COFINS '+('0'+(MESES_ALL.indexOf(S.mes)+1)).slice(-2)+'.2026" encontrado.</div>';
   h2+='</div></div>';
-  // DARFs
-  h2+='<div class="card"><div class="card-hdr"><div class="card-title">💳 Conciliação DARFs — Verificação</div></div><div class="card-body">'+
-    '<div style="font-size:11px;color:#666;margin-bottom:12px;padding:8px 12px;background:#EEF1F8;border-radius:6px">Fator rateio: <strong>'+Math.round(conc.fator*10000)/100+'%</strong></div>'+
+  // DARFs — conferência cálculo
+  h2+='<div class="card"><div class="card-hdr"><div class="card-title">💳 Conferência DARFs a Pagar — Cálculo vs Apurado</div></div><div class="card-body">'+
+    '<div style="font-size:11px;color:#666;margin-bottom:12px;padding:8px 12px;background:#EEF1F8;border-radius:6px">'+
+    'Fator rateio: <strong>'+Math.round(conc.fator*10000)/100+'%</strong> · '+
+    'Crédito PIS utilizável: <strong>'+BRL(conc.credPis)+'</strong> · '+
+    'Crédito COFINS utilizável: <strong>'+BRL(conc.credCof)+'</strong></div>'+
     '<table class="ap"><thead><tr>'+
     '<th class="tdesc" style="background:#001F5B;text-align:left">Tributo</th>'+
-    '<th style="background:#001F5B;color:#fff">Calculado</th>'+
-    '<th style="background:#001F5B;color:#fff">Apurado (DARF)</th>'+
-    '<th style="background:#001F5B;color:#fff">Diferença</th>'+
+    '<th style="background:#001F5B;color:#fff;min-width:120px">Calculado</th>'+
+    '<th style="background:#001F5B;color:#fff;min-width:120px">Apurado (DARF)</th>'+
+    '<th style="background:#001F5B;color:#fff;min-width:80px">Diferença</th>'+
     '<th style="background:#001F5B;color:#fff;text-align:center">Status</th>'+
     '</tr></thead><tbody>';
   conc.darfCheck.forEach(function(d,i){
     var diff=Math.abs(d.calc-(d.apurado||0));
     var bg=d.ok?(i%2?'#F0FBF4':'#E6F7ED'):(i%2?'#FEF9EC':'#FEF3CD');
-    h2+='<tr style="background:'+bg+'"><td style="font-weight:600">'+d.label+'</td>'+
-      '<td>'+BRL(d.calc)+'</td><td>'+BRL(d.apurado||0)+'</td>'+
+    h2+='<tr style="background:'+bg+'">'+
+      '<td style="font-weight:600"><span title="'+d.formula+'">'+d.label+' ℹ️</span></td>'+
+      '<td>'+BRL(d.calc)+'</td>'+
+      '<td>'+BRL(d.apurado||0)+'</td>'+
       '<td style="color:'+(diff<0.10?'#1A7340':'#922B21')+'">'+BRL(diff)+'</td>'+
       '<td style="text-align:center">'+statusBadge(d.ok?'ok':'divergente')+'</td></tr>';
+    // Show formula as detail row
+    h2+='<tr style="background:'+(i%2?'#F0FBF4':'#E6F7ED')+'"><td colspan="5" style="font-size:10px;color:#888;padding:3px 12px 6px 24px">'+d.formula+'</td></tr>';
   });
   h2+='</tbody></table></div></div>';
   // Raw razão
   var uid='razao_raw_'+S.mes;
   h2+='<div class="inner-toggle"><div class="inner-hdr" data-uid="'+uid+'" onclick="itoggle(this.dataset.uid)">'+
-    '<span class="inner-hdr-title">📄 Todos os lançamentos — '+RAZAO_ROWS.length+' linhas</span>'+
+    '<span class="inner-hdr-title">📄 Todos os lançamentos do Razão — '+RAZAO_ROWS.length+' linhas</span>'+
     '<span class="inner-meta"><span id="'+uid+'_ar" style="font-size:13px;color:#001F5B">▶</span></span>'+
     '</div><div class="inner-body" id="'+uid+'" style="overflow-x:auto">'+
-    '<table class="inner"><thead><tr><th style="text-align:left">Data</th><th style="text-align:left">Doc</th>'+
+    '<table class="inner"><thead><tr>'+
+    '<th style="text-align:left">Data</th><th style="text-align:left">Doc</th>'+
     '<th style="text-align:left">N°NFSE</th><th style="text-align:left;min-width:130px">Nome</th>'+
-    '<th>Valor</th><th style="text-align:left;min-width:150px">Memorando</th><th style="text-align:left">Conta</th>'+
+    '<th>Valor</th><th style="text-align:left;min-width:180px">Memorando</th><th style="text-align:left">Conta</th>'+
     '</tr></thead><tbody>';
   RAZAO_ROWS.slice(1).forEach(function(row,i){
     if(!row[1]) return;
     h2+='<tr'+(i%2?' style="background:#F5F6FA"':'')+'><td style="font-size:10px">'+String(row[1]||'')+'</td>'+
       '<td style="font-size:10px;color:#001F5B;font-weight:600">'+String(row[2]||'')+'</td>'+
       '<td style="font-size:10px;color:#185FA5">'+String(row[3]||'')+'</td>'+
-      '<td>'+String(row[4]||'').substring(0,20)+'</td>'+
+      '<td>'+String(row[4]||'').substring(0,22)+'</td>'+
       '<td>'+BRL(tf(row[5]))+'</td>'+
-      '<td style="font-size:10px;color:#666">'+String(row[6]||'').substring(0,35)+'</td>'+
-      '<td style="font-size:10px;color:#888">'+String(row[7]||'').substring(0,20)+'</td></tr>';
+      '<td style="font-size:10px;color:#666">'+String(row[6]||'').substring(0,40)+'</td>'+
+      '<td style="font-size:10px;color:#888">'+String(row[7]||'').substring(0,25)+'</td></tr>';
   });
   h2+='</tbody></table></div></div>';
   return h2;
+}
+
+function exportBook() {
+  var m=HIST[S.mes]; if(!m) return;
+  if(typeof XLSX==='undefined'){showStatus('SheetJS não carregado.',true);return;}
+  var wb=XLSX.utils.book_new();
+  var numer=m.fat.nc+m.fat.exp+(m.recFin.total||0);
+  var denom=m.fat.cum+m.fat.nc+m.fat.exp+(m.recFin.total||0);
+  var fator=denom?numer/denom:0;
+  // 1. Base Lei
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
+    ["Item","Descrição","Regime","Alíq. PIS","Alíq. COFINS","Base ISS"],
+    ["1.05","Desenvolvimento e licenciamento de programas","Não Cumulativo","1,65%","7,60%","Sim"],
+    ["1.07","Suporte técnico e outros serviços em TI","Cumulativo","0,65%","3,00%","Sim"],
+    ["1.06","Licenciamento — Exportação","Exportação","—","—","Não"],
+    ["1.03","Processamento de dados — Exportação","Exportação","—","—","Não"],
+    ["17.01","Consultoria — Exportação","Exportação","—","—","Não"],
+  ]),"1. Base Serviços Lei");
+  // 1.1 Faturamento
+  var fatRows=[["NF","Data","Tomador","CNPJ","Valor Bruto","Item","Regime","ISS","PIS","COFINS","INSS","IR Ret.","Mês"]];
+  (m.nfse||[]).forEach(function(nf){fatRows.push([nf.nf,nf.data,nf.tomador,nf.cnpj,nf.valor,nf.item,nf.regime,nf.iss,nf.pisCum||nf.pisNC,nf.cofCum||nf.cofNC,nf.inss,nf.ir||0,m.mesRef]);});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(fatRows),"1.1 Faturamento");
+  // 2. Receitas Financeiras
+  var rfRows=[["Mês","Conta","Descrição","Valor Base","PIS (0,65%)","COFINS (4,00%)","Total Débito"]];
+  (m.recFin.porConta||[]).forEach(function(pc){rfRows.push([m.mesRef,pc.conta,pc.nome||pc.conta,pc.valor,pc.valor*0.0065,pc.valor*0.04,pc.valor*0.0465]);});
+  rfRows.push(["TOTAL","","",m.recFin.total,m.recFin.pis,m.recFin.cof,m.recFin.pis+m.recFin.cof]);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rfRows),"2. Receitas Financeiras");
+  // 3. Créditos
+  var credRows=[["Mês","Tipo","Fornecedor","NF/Doc","Base Cálculo","PIS (1,65%)","COFINS (7,60%)","Total"]];
+  (m.cred.itens||[]).forEach(function(it){credRows.push([m.mesRef,it.tipo,it.nome,it.doc||'',it.base,it.pis,it.cof,it.pis+it.cof]);});
+  var dep=m.cred.dep||{};
+  if(dep.maq) credRows.push([m.mesRef,'Depreciação','Máquinas e Equipamentos','',dep.maq,dep.pisMaq,dep.cofMaq,dep.pisMaq+dep.cofMaq]);
+  if(dep.comp) credRows.push([m.mesRef,'Depreciação','Computadores','',dep.comp,dep.pisComp,dep.cofComp,dep.pisComp+dep.cofComp]);
+  if(dep.soft) credRows.push([m.mesRef,'Depreciação','Softwares','',dep.soft,dep.pisSoft,dep.cofSoft,dep.pisSoft+dep.cofSoft]);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(credRows),"3. Entradas - Créditos");
+  // 3.1 Rateio
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
+    ["Mês","Fat. Cumulativo","Fat. NC","Exportação","Rec. Financeira","Denominador","Numerador","Fator Rateio","Créd. PIS Bruto","Créd. PIS Utilizável","Créd. COFINS Bruto","Créd. COFINS Utilizável"],
+    [m.mesRef,m.fat.cum,m.fat.nc,m.fat.exp,m.recFin.total,denom,numer,fator,m.cred.pisTot,m.cred.pisTot*fator,m.cred.cofTot,m.cred.cofTot*fator],
+  ]),"3.1 Rateio Créditos");
+  // 4. Razão
+  var razaoSheet=[["Data","Doc","N°NFSE","Nome","Valor","Memorando","Conta"]];
+  if(RAZAO_ROWS&&RAZAO_ROWS.length>1) RAZAO_ROWS.slice(1).forEach(function(r){if(r[1])razaoSheet.push([r[1],r[2],r[3],r[4],r[5],r[6],r[7]]);});
+  else razaoSheet.push(["Em implementação","","","","","",""]);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(razaoSheet),"4. Razão Contábil");
+  // 5. Retenções
+  var retRows=[["NFS-e","Data","Tomador","CNPJ","Valor NF","PIS Retido","COFINS Retido","Total"]];
+  (m.ret&&m.ret.nfs||[]).forEach(function(r){retRows.push([r.nfse,r.data,r.tomador,r.cnpj,r.valor,r.pisRet||0,r.cofRet||0,(r.pisRet||0)+(r.cofRet||0)]);});
+  retRows.push(["TOTAL","","","","",m.ret&&m.ret.pis||0,m.ret&&m.ret.cof||0,(m.ret&&m.ret.pis||0)+(m.ret&&m.ret.cof||0)]);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(retRows),"5. Retenção Faturamento");
+  // 6. Apuração Consolidada
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
+    ["APURAÇÃO CONSOLIDADA — "+m.mesRef,""],
+    ["PIPEFY MARKETING E TECNOLOGIA LTDA — CNPJ: 20.504.074/0001-72",""],
+    ["",""],
+    ["FATURAMENTO",""],
+    ["Faturamento Total",m.fat.total],
+    ["└ Regime Cumulativo (1.07)",m.fat.cum],
+    ["└ Regime Não Cumulativo (1.05)",m.fat.nc],
+    ["└ Exportação (A100)",m.fat.exp],
+    ["",""],
+    ["RECEITAS FINANCEIRAS",""],
+    ["Total Receitas Financeiras",m.recFin.total],
+    ["PIS s/ Rec. Financeira (0,65%)",m.recFin.pis],
+    ["COFINS s/ Rec. Financeira (4,00%)",m.recFin.cof],
+    ["",""],
+    ["CRÉDITOS (pós-rateio "+Math.round(fator*10000)/100+"%)",""],
+    ["Fator de Rateio",fator],
+    ["Crédito PIS Bruto",m.cred.pisTot],
+    ["Crédito PIS Utilizável (pós-rateio)",m.cred.pisTot*fator],
+    ["Crédito COFINS Bruto",m.cred.cofTot],
+    ["Crédito COFINS Utilizável (pós-rateio)",m.cred.cofTot*fator],
+    ["",""],
+    ["RETENÇÕES NA FONTE",""],
+    ["PIS Retido",m.ret&&m.ret.pis||0],
+    ["COFINS Retido",m.ret&&m.ret.cof||0],
+    ["",""],
+    ["DARFs A PAGAR",""],
+    ["PIS Cumulativo (cod.8109)",m.darfPisCum],
+    ["PIS Não Cumulativo (cod.6912)",m.darfPisNC],
+    ["COFINS Cumulativo (cod.2172)",m.darfCofCum],
+    ["COFINS Não Cumulativo (cod.5856)",m.darfCofNC],
+    ["ISS — DAM Prefeitura",m.iss],
+    ["INSS Desoneração (cod.2985)",m.inss],
+    ["",""],
+    ["TOTAL GERAL A RECOLHER",m.total],
+  ]),"6. Apuração Consolidada");
+  XLSX.writeFile(wb,'Book_Apuracao_'+m.mesRef.replace('/','_')+'.xlsx');
+  showStatus('📒 Book baixado com sucesso!');
 }
 
 buildSidebar(); updateHeader(); render();
