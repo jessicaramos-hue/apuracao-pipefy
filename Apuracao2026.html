@@ -1578,11 +1578,13 @@ function conciliar(HIST, mes, razaoData) {
   var rfLancado=razaoData.recFin.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var rfStatus=razaoData.recFin.length===0?'pendente':(Math.abs(rfImpostos-rfLancado)<1?'ok':'divergente');
   // 3. Transf. Saldo Credor — comparar PIS+COFINS a pagar
-  // Transf. inclui PIS+COFINS NC + Retenção CUM (transferida para saldo credor)
-  var transfPisNC = m.darfPisNC||0;
-  var transfCofNC = m.darfCofNC||0;
-  var transfPisCum = m.darfPisCum||0;
-  var transfCofCum = m.darfCofCum||0;
+  // Transf. Saldo Credor: NC (líquido pós-crédito) + CUM bruto (antes da retenção)
+  // JE2891 = PIS NC + COFINS NC = darfPisNC + darfCofNC
+  // JE2893 = PIS CUM bruto + COFINS CUM bruto = fat.pisCum + fat.cofCum
+  var transfPisNC  = m.darfPisNC||0;
+  var transfCofNC  = m.darfCofNC||0;
+  var transfPisCum = m.fat&&m.fat.pisCum||0;
+  var transfCofCum = m.fat&&m.fat.cofCum||0;
   var transfEsp = transfPisNC + transfCofNC + transfPisCum + transfCofCum;
   var transfLanc=razaoData.transf.reduce(function(s,r){return s+Math.abs(r.valor);},0);
   var transfStatus=razaoData.transf.length===0?'pendente':(Math.abs(transfEsp-transfLanc)<1?'ok':'divergente');
