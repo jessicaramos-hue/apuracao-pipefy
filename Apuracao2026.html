@@ -401,8 +401,8 @@ function processFaturamento(rows) {
   rows.slice(1).forEach(function(row){
     if(!row[0] && !row[1]) return;
 
-    // col6 = Data de cancelamento — se preenchida ignora
-    var canc = String(row[6]||'').trim();
+    // col6=Item, col7=Data de cancelamento — se preenchida ignora
+    var canc = String(row[7]||'').trim();
     if(canc) return;
 
     var nf      = String(row[1]||'').trim();
@@ -410,7 +410,7 @@ function processFaturamento(rows) {
     var forn    = String(row[3]||'').trim();
     var cnpj    = String(row[4]||'').trim();
     var valor   = tf(row[5]);
-    var itemDesc= String(row[7]||'').trim();
+    var itemDesc= String(row[6]||'').trim();
 
     if(valor <= 0) return;
 
