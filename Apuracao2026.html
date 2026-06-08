@@ -198,7 +198,7 @@ table.ann .tot-row td{background:#C8962E!important;color:#fff!important;font-wei
     <div class="sb-item" onclick="setStep(1)">📅 Visão Anual</div>
     <div class="sb-item" onclick="setStep(2)">💳 DARFs</div>
     <div class="sb-item" onclick="setStep(3)">📥 Exportar</div>
-    <div class="sb-item" onclick="setStep(4)">📒 Razão Contábil</div>
+    <div class="sb-item" onclick="setStep(4)">🔍 Conciliação Fiscal</div>
     <div class="sb-sec">Meses</div>
     <div id="sb-meses"></div>
     <div class="sb-foot">
@@ -1453,7 +1453,7 @@ function selecionarMes(key) {
 function setStep(s) {
   S.step=s;
   document.querySelectorAll('.sb-item').forEach(function(el,i){el.classList.toggle('active',i===s);});
-  document.getElementById('tb-title').textContent=['Apuração Consolidada','Visão Anual','DARFs e Comprovantes','Exportar','Razão Contábil'][s];
+  document.getElementById('tb-title').textContent=['Apuração Consolidada','Visão Anual','DARFs e Comprovantes','Exportar','Conciliação Fiscal'][s];
   render();
 }
 
@@ -1624,7 +1624,7 @@ function step4() {
   var m=HIST[S.mes];
   if(!m) return '<div class="card"><div class="card-body"><p style="color:#888">Selecione um mês.</p></div></div>';
   if(['Jan','Fev','Mar','Abr'].indexOf(S.mes)>=0) {
-    return '<div class="card"><div class="card-hdr"><div class="card-title">📒 Razão Contábil — '+m.mesRef+'</div></div>'+
+    return '<div class="card"><div class="card-hdr"><div class="card-title">🔍 Conciliação Fiscal — '+m.mesRef+'</div></div>'+
       '<div class="card-body" style="text-align:center;padding:40px 20px">'+
       '<div style="font-size:32px;margin-bottom:12px">📋</div>'+
       '<div style="font-size:14px;font-weight:600;color:#001F5B;margin-bottom:8px">Razão não disponível para '+m.mesRef+'</div>'+
@@ -1632,7 +1632,7 @@ function step4() {
       '</div></div>';
   }
   if(!RAZAO_ROWS||RAZAO_ROWS.length<2) {
-    return '<div class="card"><div class="card-hdr"><div class="card-title">📒 Razão Contábil — '+m.mesRef+'</div></div>'+
+    return '<div class="card"><div class="card-hdr"><div class="card-title">🔍 Conciliação Fiscal — '+m.mesRef+'</div></div>'+
       '<div class="card-body" style="text-align:center;padding:40px 20px">'+
       '<div style="font-size:32px;margin-bottom:12px">📋</div>'+
       '<div style="font-size:13px;color:#888">Dados do razão não carregados.<br>Clique em <strong>🔄 Atualizar</strong>.</div>'+
