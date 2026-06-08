@@ -401,7 +401,7 @@ function processFaturamento(rows) {
   rows.slice(1).forEach(function(row){
     if(!row[0] && !row[1]) return;
 
-    // col6=Item, col7=Data de cancelamento — se preenchida ignora
+    // col6=Item, col7=Data cancelamento — se preenchida ignora
     var canc = String(row[7]||'').trim();
     if(canc) return;
 
@@ -653,6 +653,7 @@ async function syncSheets() {
     var meses=Object.keys(HIST);
     if(meses.length){S.mes=meses[meses.length-1];}
     document.getElementById('lastSync').textContent='Atualizado: '+new Date().toLocaleTimeString('pt-BR');
+    buildSidebar(); updateHeader(); render();
     showStatus('✅ Dados atualizados — '+meses.length+' meses carregados');
   } catch(err){
     console.error(err);
@@ -667,7 +668,6 @@ async function syncSheets() {
     setLoading(false);
     btn.disabled=false; btn.textContent='🔄 Atualizar';
   }
-  buildSidebar(); updateHeader(); render();
 }
 
 function setLoading(show,text,sub){
