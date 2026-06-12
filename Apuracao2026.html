@@ -1981,6 +1981,17 @@ function gerarSPED(){
     add('A170','1|'+(isCum?'107 Suporte tecnico manutencao e outros servicos em tecnolog':'105')+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|');
     cntA+=2;
   });
+  // Aluguéis — A100/A170 documentos de entrada
+  (c.itens||[]).filter(function(it){return it.tipo==='Aluguel';}).forEach(function(it){
+    var pCAlug='';
+    var nomeUp=it.nome.toUpperCase();
+    if(nomeUp.indexOf('GALVÃO')>=0||nomeUp.indexOf('GALVAO')>=0)pCAlug=partic['12978183000101']?partic['12978183000101'].cod:'';
+    else if(nomeUp.indexOf('TRUE NORTH')>=0)pCAlug=partic['51415694000169']?partic['51415694000169'].cod:'';
+    else if(nomeUp.indexOf('BEERORCOFFEE')>=0)pCAlug=partic['18123640000154']?partic['18123640000154'].cod:'';
+    add('A100','0|1|'+pCAlug+'|00|||'+dtFin+'||'+dtFin+'|'+dtFin+'|'+fmt(it.base)+'|0|0|'+fmt(it.base)+'|'+fmt(it.pis)+'|'+fmt(it.base)+'|'+fmt(it.cof)+'|'+fmt(it.pis)+'|'+fmt(it.cof)+'|0');
+    add('A170','1|Servicos de Aluguel Imovel||'+fmt(it.base)+'|0|03|0|53|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|53|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|2.1.01.01.0001|');
+    cntA+=2;
+  });
   add('A990',String(cntA+3));
 
   // BLOCO C
@@ -2005,10 +2016,7 @@ function gerarSPED(){
     add('F100','1|||'+dtFin+'|'+fmt(pc.valor)+'|02|'+fmt(pc.valor)+'|0,65|'+fmt(pc.valor*0.0065)+'|02|'+fmt(pc.valor)+'|4|'+fmt(pc.valor*0.04)+'|||'+pc.conta+'||');
     cntF++;
   });
-  (c.itens||[]).filter(function(it){return it.tipo==='Aluguel';}).forEach(function(it){
-    add('F100','1|||'+dtFin+'|'+fmt(it.base)+'|53|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|53|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|||2.1.01.01.0001||');
-    cntF++;
-  });
+  // Aluguéis vão para A100/A170 (bloco A), não F100
   // F120: 17 fields
   if((dep.maq||0)>0){add('F120','09|01||2|'+fmt(dep.maq)+'||53|'+fmt(dep.maq)+'|1,65|'+fmt(dep.pisMaq)+'|53|'+fmt(dep.maq)+'|7,6|'+fmt(dep.cofMaq)+'|3.3.01.13.0002||');cntF++;}
   if((dep.comp||0)>0){add('F120','09|01||2|'+fmt(dep.comp)+'||53|'+fmt(dep.comp)+'|1,65|'+fmt(dep.pisComp)+'|53|'+fmt(dep.comp)+'|7,6|'+fmt(dep.cofComp)+'|3.3.01.13.0003||');cntF++;}
