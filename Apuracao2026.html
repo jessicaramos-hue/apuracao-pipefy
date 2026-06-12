@@ -1934,7 +1934,7 @@ function gerarSPED(){
   add('0000','006|0|||'+dtIni+'|'+dtFin+'|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR|4106902||00|1');
   add('0001','0');
   // 0100: 13 fields (nome|cpf|crc|cnpj|cep|end|num|compl|bairro|fone|fax|email|cod_mun)
-  add('0100','BRUNA BARROTTI|36006490862|316244O6|||||||||||');
+  add('0100','BRUNA BARROTTI|36006490862|316244O6||||||||||');
   // 0110: 4 fields (tipo_inc_parc|num_reg_prev|num_reg_cumpr|ind_mov)  
   add('0110','3|2|1|');
   // 0111: 5 fields
@@ -1971,8 +1971,7 @@ function gerarSPED(){
     // A100: 21 fields
     add('A100','1|0|'+pC+'|00|1||'+nf.nf+'||'+nf.data.replace(/\//g,'')+'|'+nf.data.replace(/\//g,'')+
       '|'+fmt(nf.valor)+'|0|0|'+fmt(nf.valor)+'|'+fmt(pis)+'|'+fmt(nf.valor)+'|'+fmt(cof)+'|'+fmt(pis)+'|'+fmt(cof)+'|'+fmt(nf.iss||0));
-    var cod=isCum?'107 Suporte tecnico manutencao e outros servicos em tecnolog':'105';
-    // A170: 17 fields
+    // A170: 17 fields (ind_op|cod_item|desc_compl|vl_bc_pis|aliq_pis_pct|quant_bc_pis|vl_pis|cst_cofins|quant_bc_cofins|aliq_cofins_pct|vl_cofins|cod_cta|cod_centro|...)
     add('A170','1|'+cod+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|');
     cntA+=2;
   });
@@ -2064,8 +2063,12 @@ function gerarSPED(){
   add('9001','0');
   var regs=Object.keys(cnt).sort();
   regs.forEach(function(r){add('9900',r+'|'+cnt[r]);});
-  add('9900','9900|'+String(regs.length+1));
-  var tot=linhas.length+2;
+  // Add counts for 9900, 9990, 9999 themselves
+  var n9900=regs.length+3; // +1 for 9900 self-ref, +1 for 9990, +1 for 9999 not included
+  add('9900','9900|'+String(n9900));
+  add('9900','9990|1');
+  add('9900','9999|1');
+  var tot=linhas.length+1;
   add('9990',String(tot+1));
   add('9999',String(tot+2));
 
