@@ -1909,6 +1909,7 @@ function exportBook() {
 }
 
 
+
 function gerarSPED(){
   var m=HIST[S.mes];if(!m)return;
   if(['Jan','Fev','Mar','Abr'].indexOf(S.mes)>=0){showStatus('SPED disponível apenas a partir de Maio/2026',true);return;}
@@ -1925,27 +1926,40 @@ function gerarSPED(){
   nfse.forEach(function(nf){if(nf.regime!=='Exportação'&&nf.cnpj)getP(nf.cnpj,nf.tomador,'SP','3550308');});
   (c.itens||[]).forEach(function(it){if(it.tipo==='Energia')getP('04368898000106','COPEL DISTRIBUICAO SA','PR','4106902');else if(it.tipo==='Aluguel')getP('',it.nome,'SP','3550308');});
   var linhas=[],cnt={};
+  // add(): creates |REG|campos| — campos must have exact field count per layout
   function add(reg,campos){cnt[reg]=(cnt[reg]||0)+1;linhas.push('|'+reg+'|'+campos+'|');}
+
+  // BLOCO 0
+  // 0000: 14 fields
   add('0000','006|0|||'+dtIni+'|'+dtFin+'|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR|4106902||00|1');
   add('0001','0');
-  add('0100','BRUNA BARROTTI|36006490862|316244O6||||||||||||');
-  add('0110','3|2|1|||');
+  // 0100: 13 fields (nome|cpf|crc|cnpj|cep|end|num|compl|bairro|fone|fax|email|cod_mun)
+  add('0100','BRUNA BARROTTI|36006490862|316244O6|||||||||||');
+  // 0110: 4 fields (tipo_inc_parc|num_reg_prev|num_reg_cumpr|ind_mov)  
+  add('0110','3|2|1|');
+  // 0111: 5 fields
   add('0111',fmt(fat.cum+fat.nc+rf.total)+'|0|0|'+fmt(fat.exp)+'|'+fmt(fat.total+rf.total));
-  add('0140','|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR||4106902|6967123|||');
-  Object.values(partic).forEach(function(p){add('0150',p.cod+'|'+p.nome+'|1058|'+p.cnpj+'|||'+p.mun+'|||SN||||');});
+  // 0140: 8 fields (ind_ativ|nome|cnpj|uf|ie|cod_mun|cnae|ie_st)
+  add('0140','|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR||4106902|6967123|');
+  // 0150: 12 fields (cod|nome|cod_pais|cnpj|cpf|ie|cod_mun|suframa|end|num|compl|bairro)
+  Object.values(partic).forEach(function(p){add('0150',p.cod+'|'+p.nome+'|1058|'+p.cnpj+'|||'+p.mun+'|||SN||');});
   add('0190','Srv|Servico');
-  add('0200','Servicos de Aluguel Imovel|Property Rental Service|||Srv|10|||00||||');
-  add('0200','107 Suporte tecnico manutencao e outros servicos em tecnolog|Suporte tecnico||||09|||00|1.07|||');
-  add('0200','105|Licenciamento ou cessao de direito de uso de programas|||Srv|09||||1.05|||');
+  // 0200: 11 fields
+  add('0200','Servicos de Aluguel Imovel|Property Rental Service|||Srv|10|||00||');
+  add('0200','107 Suporte tecnico manutencao e outros servicos em tecnolog|Suporte tecnico||||09|||00|1.07|');
+  add('0200','105|Licenciamento ou cessao de direito de uso de programas|||Srv|09||||1.05|');
   add('0400','1|Tributacao no Municipio');
-  add('0500',dtFin+'|01|A|5|1.1.03.01.0001|CONTAS A RECEBER||||');
-  add('0500',dtFin+'|02|A|5|2.1.01.01.0001|FORNECEDORES A PAGAR||||');
-  add('0500',dtFin+'|02|A|5|3.3.02.02.0003|DESCONTOS OBTIDOS||||');
-  add('0500',dtFin+'|02|A|5|3.3.02.02.0004|JUROS ATIVOS||||');
-  add('0500',dtFin+'|02|A|5|3.3.02.02.0005|JUROS RECEBIDOS||||');
-  add('0500','01012025|02|A|5|3.3.01.13.0002|DESPESA DE DEPRECIACAO - MAQUINAS E EQUIPAMENTOS||||');
-  add('0500','01012025|02|A|5|3.3.01.13.0003|DESPESA DE DEPRECIACAO - COMPUTADORES||||');
+  // 0500: 8 fields (dt_alt|cod_nat|ind_cta|nivel|cod_cta|nome_cta|cod_cta_ref|ent_ref)
+  add('0500',dtFin+'|01|A|5|1.1.03.01.0001|CONTAS A RECEBER||');
+  add('0500',dtFin+'|02|A|5|2.1.01.01.0001|FORNECEDORES A PAGAR||');
+  add('0500',dtFin+'|02|A|5|3.3.02.02.0003|DESCONTOS OBTIDOS||');
+  add('0500',dtFin+'|02|A|5|3.3.02.02.0004|JUROS ATIVOS||');
+  add('0500',dtFin+'|02|A|5|3.3.02.02.0005|JUROS RECEBIDOS||');
+  add('0500','01012025|02|A|5|3.3.01.13.0002|DESPESA DE DEPRECIACAO - MAQUINAS E EQUIPAMENTOS||');
+  add('0500','01012025|02|A|5|3.3.01.13.0003|DESPESA DE DEPRECIACAO - COMPUTADORES||');
   add('0990',String(linhas.length+1));
+
+  // BLOCO A
   add('A001','0');add('A010','20504074000172');
   var cntA=0;
   nfse.forEach(function(nf){
@@ -1954,58 +1968,81 @@ function gerarSPED(){
     var isCum=nf.regime==='Cumulativo';
     var pis=isCum?(nf.pisCum||0):(nf.pisNC||0),cof=isCum?(nf.cofCum||0):(nf.cofNC||0);
     var ap=isCum?'0,65':'1,65',ac=isCum?'3':'7,6';
+    // A100: 21 fields
     add('A100','1|0|'+pC+'|00|1||'+nf.nf+'||'+nf.data.replace(/\//g,'')+'|'+nf.data.replace(/\//g,'')+
-      '|'+fmt(nf.valor)+'|0|0|'+fmt(nf.valor)+'|'+fmt(pis)+'|'+fmt(nf.valor)+'|'+fmt(cof)+'|'+fmt(pis)+'|'+fmt(cof)+'|'+fmt(nf.iss||0));
-    var cod=isCum?'107 Suporte tecnico manutencao e outros servicos em tecnolog':'105';
-    add('A170','1|'+cod+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|||');
+      '|'+fmt(nf.valor)+'|0|0|'+fmt(nf.valor)+'|'+fmt(pis)+'|'+fmt(nf.valor)+'|'+fmt(cof)+'|'+fmt(pis)+'|'+fmt(cof)+'|'+fmt(nf.iss||0)+'|');
+    // A170: 17 fields (ind_op|cod_item|desc_compl|vl_bc_pis|aliq_pis_pct|quant_bc_pis|vl_pis|cst_cofins|quant_bc_cofins|aliq_cofins_pct|vl_cofins|cod_cta|cod_centro|...)
+    add('A170','1|'+cod+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|');
     cntA+=2;
   });
   add('A990',String(cntA+3));
+
+  // BLOCO C
   add('C001','0');add('C010','20504074000172|2');
   var cntC=0;
   (c.itens||[]).filter(function(it){return it.tipo==='Energia';}).forEach(function(it){
     var pC2=partic['04368898000106']?partic['04368898000106'].cod:'2556';
-    add('C500',pC2+'|06|00|3||'+(it.doc||'')+'|'+dtFin+'|'+dtFin+'|'+fmt(it.base)+'|0||'+fmt(it.pis)+'|'+fmt(it.cof)+'|||');
+    // C500: 14 fields
+    add('C500',pC2+'|06|00|3||'+(it.doc||'')+'|'+dtFin+'|'+dtFin+'|'+fmt(it.base)+'|0||'+fmt(it.pis)+'|'+fmt(it.cof)+'|');
     add('C501','53|'+fmt(it.base)+'|04|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|2.1.01.01.0001');
     add('C505','53|'+fmt(it.base)+'|04|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|2.1.01.01.0001');
     cntC+=3;
   });
   add('C990',String(cntC+3));
   add('D001','1');add('D990','2');
+
+  // BLOCO F
   add('F001','0');add('F010','20504074000172');
   var cntF=0;
-  (rf.porConta||[]).forEach(function(pc){add('F100','1|||'+dtFin+'|'+fmt(pc.valor)+'|02|'+fmt(pc.valor)+'|0,65|'+fmt(pc.valor*0.0065)+'|02|'+fmt(pc.valor)+'|4|'+fmt(pc.valor*0.04)+'|||'+pc.conta+'||||');cntF++;});
-  (c.itens||[]).filter(function(it){return it.tipo==='Aluguel';}).forEach(function(it){add('F100','1|||'+dtFin+'|'+fmt(it.base)+'|03|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|03|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|||2.1.01.01.0001||||');cntF++;});
-  if((dep.maq||0)>0){add('F120','09|01||2|'+fmt(dep.maq)+'||53|'+fmt(dep.maq)+'|1,65|'+fmt(dep.pisMaq)+'|53|'+fmt(dep.maq)+'|7,6|'+fmt(dep.cofMaq)+'|3.3.01.13.0002||||');cntF++;}
-  if((dep.comp||0)>0){add('F120','09|01||2|'+fmt(dep.comp)+'||53|'+fmt(dep.comp)+'|1,65|'+fmt(dep.pisComp)+'|53|'+fmt(dep.comp)+'|7,6|'+fmt(dep.cofComp)+'|3.3.01.13.0003||||');cntF++;}
+  // F100: 18 fields (nat_rec|vl_tot|cod_cta|cod_centro|...)
+  (rf.porConta||[]).forEach(function(pc){
+    add('F100','1|||'+dtFin+'|'+fmt(pc.valor)+'|02|'+fmt(pc.valor)+'|0,65|'+fmt(pc.valor*0.0065)+'|02|'+fmt(pc.valor)+'|4|'+fmt(pc.valor*0.04)+'|||'+pc.conta+'|');
+    cntF++;
+  });
+  (c.itens||[]).filter(function(it){return it.tipo==='Aluguel';}).forEach(function(it){
+    add('F100','1|||'+dtFin+'|'+fmt(it.base)+'|03|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|03|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|||2.1.01.01.0001|');
+    cntF++;
+  });
+  // F120: 17 fields
+  if((dep.maq||0)>0){add('F120','09|01||2|'+fmt(dep.maq)+'||53|'+fmt(dep.maq)+'|1,65|'+fmt(dep.pisMaq)+'|53|'+fmt(dep.maq)+'|7,6|'+fmt(dep.cofMaq)+'|3.3.01.13.0002|');cntF++;}
+  if((dep.comp||0)>0){add('F120','09|01||2|'+fmt(dep.comp)+'||53|'+fmt(dep.comp)+'|1,65|'+fmt(dep.pisComp)+'|53|'+fmt(dep.comp)+'|7,6|'+fmt(dep.cofComp)+'|3.3.01.13.0003|');cntF++;}
   add('F990',String(cntF+3));
   add('I001','1');add('I990','2');
+
+  // BLOCO M
   add('M001','0');
   var bAlug=c.pisAlug?Math.round(c.pisAlug/0.0165*100)/100:0;
   var bEner=c.pisEner?Math.round(c.pisEner/0.0165*100)/100:0;
   var bDep=(dep.comp||0)+(dep.maq||0),totBase=bAlug+bEner+bDep;
+
+  // M100: 14 fields
   add('M100','101|0|'+fmt(totBase)+'|1,65|0||'+fmt(c.pisTot)+'|0|0|0|'+fmt(c.pisTot)+'|0|'+fmt(c.pisTot)+'|0');
-  if(bAlug>0)add('M105','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|'+fmt(bAlug*fator)+'||0|||');
-  if(bDep>0)add('M105','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|'+fmt(bDep*fator)+'||0|||');
-  if(bEner>0)add('M105','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|'+fmt(bEner*fator)+'||0|||');
+  // M105: 9 fields (nat_bc_cred|cst|vl_bc_cred|vl_bc_ded|vl_bc_ded_ger|vl_cred|ind_orig_cred|vl_cred_desc|quant_bc_cred)
+  if(bAlug>0)add('M105','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|'+fmt(bAlug*fator)+'||0|');
+  if(bDep>0)add('M105','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|'+fmt(bDep*fator)+'||0|');
+  if(bEner>0)add('M105','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|'+fmt(bEner*fator)+'||0|');
+
   add('M100','201|0|0|1,65|0||0|0|0|0|0|0|0|0');
-  if(bAlug>0)add('M105','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|0||0||');
-  if(bDep>0)add('M105','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|0||0||');
-  if(bEner>0)add('M105','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0||');
+  if(bAlug>0)add('M105','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|0||0|');
+  if(bDep>0)add('M105','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|0||0|');
+  if(bEner>0)add('M105','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0|');
+
   var darfPis=m.darfPisCum+m.darfPisNC;
   add('M200',fmt(fat.pisCum+fat.pisNC)+'|'+fmt(c.pisTot)+'|0|'+fmt(darfPis)+'|0|0|'+fmt(darfPis)+'|'+fmt(ret.pis||0)+'|'+fmt(ret.pis||0)+'|0|0|'+fmt(darfPis));
   add('M205','08|691201|'+fmt(darfPis));
   if(fat.nc>0)add('M210','01|'+fmt(fat.nc)+'|'+fmt(fat.nc)+'|0|0|'+fmt(fat.nc)+'|1,65|0||'+fmt(fat.pisNC)+'|0|0|0|0|'+fmt(fat.pisNC));
   if(rf.total>0)add('M210','02|'+fmt(rf.total)+'|'+fmt(rf.total)+'|0|0|'+fmt(rf.total)+'|0,65|0||'+fmt(rf.pis)+'|0|0|0|0|'+fmt(rf.pis));
   if(fat.cum>0)add('M210','51|'+fmt(fat.cum)+'|'+fmt(fat.cum)+'|0|0|'+fmt(fat.cum)+'|0,65|0||'+fmt(fat.pisCum)+'|0|0|0|0|'+fmt(fat.pisCum));
+
   add('M500','101|0|'+fmt(totBase)+'|7,6|0||'+fmt(c.cofTot)+'|0|0|0|'+fmt(c.cofTot)+'|0|'+fmt(c.cofTot)+'|0');
-  if(bAlug>0)add('M505','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|'+fmt(bAlug*fator)+'||0|||');
-  if(bDep>0)add('M505','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|'+fmt(bDep*fator)+'||0|||');
-  if(bEner>0)add('M505','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|'+fmt(bEner*fator)+'||0|||');
+  if(bAlug>0)add('M505','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|'+fmt(bAlug*fator)+'||0|');
+  if(bDep>0)add('M505','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|'+fmt(bDep*fator)+'||0|');
+  if(bEner>0)add('M505','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|'+fmt(bEner*fator)+'||0|');
   add('M500','201|0|0|7,6|0||0|0|0|0|0|0|0|0');
-  if(bAlug>0)add('M505','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|0||0||');
-  if(bDep>0)add('M505','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|0||0||');
-  if(bEner>0)add('M505','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0||');
+  if(bAlug>0)add('M505','03|53|'+fmt(bAlug)+'|'+fmt(bAlug*(1-fator))+'|'+fmt(bAlug*fator)+'|0||0|');
+  if(bDep>0)add('M505','09|53|'+fmt(bDep)+'|'+fmt(bDep*(1-fator))+'|'+fmt(bDep*fator)+'|0||0|');
+  if(bEner>0)add('M505','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0|');
+
   var darfCof=m.darfCofCum+m.darfCofNC;
   add('M600',fmt(fat.cofCum+fat.cofNC)+'|'+fmt(c.cofTot)+'|0|'+fmt(darfCof)+'|0|0|'+fmt(darfCof)+'|'+fmt(ret.cof||0)+'|'+fmt(ret.cof||0)+'|0|0|'+fmt(darfCof));
   add('M605','08|585601|'+fmt(darfCof));
@@ -2013,6 +2050,7 @@ function gerarSPED(){
   if(rf.total>0)add('M610','02|'+fmt(rf.total)+'|'+fmt(rf.total)+'|0|0|'+fmt(rf.total)+'|4|0||'+fmt(rf.cof)+'|0|0|0|0|'+fmt(rf.cof));
   if(fat.cum>0)add('M610','51|'+fmt(fat.cum)+'|'+fmt(fat.cum)+'|0|0|'+fmt(fat.cum)+'|3|0||'+fmt(fat.cofCum)+'|0|0|0|0|'+fmt(fat.cofCum));
   add('M990',String(linhas.filter(function(l){return l.startsWith('|M');}).length+1));
+
   add('P001','1');add('P990','2');
   add('1001','0');
   var mesAnt=MESES_ALL[MESES_ALL.indexOf(S.mes)-1]||S.mes;
@@ -2020,12 +2058,16 @@ function gerarSPED(){
   if((ret.pis||0)>0)add('1300','99|'+mAntNum+ano+'|'+fmt(ret.pis)+'|'+fmt(ret.pis)+'|0|0|0');
   if((ret.cof||0)>0)add('1700','99|'+mAntNum+ano+'|'+fmt(ret.cof)+'|'+fmt(ret.cof)+'|0|0|0');
   add('1990',String(linhas.filter(function(l){return /^\|1\d{3}\|/.test(l);}).length+1));
+
+  // BLOCO 9
   add('9001','0');
   var regs=Object.keys(cnt).sort();
   regs.forEach(function(r){add('9900',r+'|'+cnt[r]);});
   add('9900','9900|'+String(regs.length+1));
   var tot=linhas.length+2;
-  add('9990',String(tot+1));add('9999',String(tot+2));
+  add('9990',String(tot+1));
+  add('9999',String(tot+2));
+
   var blob=new Blob([linhas.join('\r\n')+'\r\n'],{type:'text/plain;charset=utf-8'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='SPED_Contribuicoes_'+mm+ano+'_Pipefy.txt';a.click();
