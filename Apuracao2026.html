@@ -1924,7 +1924,13 @@ function gerarSPED(){
   var partic={},pCod=1000;
   function getP(cnpj,nome,uf,mun){var key=fmtCNPJ(cnpj)||nome.replace(/\s/g,'').substring(0,8);if(!partic[key])partic[key]={cod:String(++pCod),nome:(nome||'').toUpperCase().substring(0,60),cnpj:fmtCNPJ(cnpj),uf:uf||'PR',mun:mun||'4106902'};return partic[key].cod;}
   nfse.forEach(function(nf){if(nf.regime!=='Exportação'&&nf.cnpj)getP(nf.cnpj,nf.tomador,'SP','3550308');});
-  (c.itens||[]).forEach(function(it){if(it.tipo==='Energia')getP('04368898000106','COPEL DISTRIBUICAO SA','PR','4106902');else if(it.tipo==='Aluguel')getP('',it.nome,'SP','3550308');});
+  (c.itens||[]).forEach(function(it){if(it.tipo==='Energia')getP('04368898000106','COPEL DISTRIBUICAO SA','PR','4106902');else if(it.tipo==='Aluguel'){
+      var cnpjAlug='';
+      if(it.nome.toUpperCase().indexOf('GALVÃO')>=0||it.nome.toUpperCase().indexOf('GALVAO')>=0)cnpjAlug='12978183000101';
+      else if(it.nome.toUpperCase().indexOf('TRUE NORTH')>=0)cnpjAlug='51415694000169';
+      else if(it.nome.toUpperCase().indexOf('BEERORCOFFEE')>=0)cnpjAlug='27735662000102';
+      if(cnpjAlug)getP(cnpjAlug,it.nome,'SP','3550308');
+    }});
   var linhas=[],cnt={};
   // add(): creates |REG|campos| — campos must have exact field count per layout
   function add(reg,campos){cnt[reg]=(cnt[reg]||0)+1;linhas.push('|'+reg+'|'+campos+'|');}
@@ -1938,11 +1944,11 @@ function gerarSPED(){
   // 0110: 4 fields (tipo_inc_parc|num_reg_prev|num_reg_cumpr|ind_mov)  
   add('0110','3|2|1|');
   // 0111: 5 fields
-  add('0111',fmt(fat.cum+fat.nc+rf.total)+'|0|0|'+fmt(fat.exp)+'|'+fmt(fat.total+rf.total));
+  add('0111',fmt(fat.nc+rf.total)+'|'+fmt(fat.cum)+'|'+fmt(fat.exp)+'|0|'+fmt(fat.total+rf.total));
   // 0140: 8 fields (ind_ativ|nome|cnpj|uf|ie|cod_mun|cnae|ie_st)
   add('0140','|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR||4106902|6967123|');
   // 0150: 12 fields (cod|nome|cod_pais|cnpj|cpf|ie|cod_mun|suframa|end|num|compl|bairro)
-  Object.values(partic).forEach(function(p){add('0150',p.cod+'|'+p.nome+'|1058|'+p.cnpj+'|||'+p.mun+'|||SN||');});
+  Object.values(partic).forEach(function(p){if(!p.cnpj)return;add('0150',p.cod+'|'+p.nome+'|1058|'+p.cnpj+'|||'+p.mun+'|||SN||');});
   add('0190','Srv|Servico');
   // 0200: 11 fields
   add('0200','Servicos de Aluguel Imovel|Property Rental Service|||Srv|10|||00||');
@@ -2000,7 +2006,7 @@ function gerarSPED(){
     cntF++;
   });
   (c.itens||[]).filter(function(it){return it.tipo==='Aluguel';}).forEach(function(it){
-    add('F100','1|||'+dtFin+'|'+fmt(it.base)+'|03|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|03|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|||2.1.01.01.0001||');
+    add('F100','1|||'+dtFin+'|'+fmt(it.base)+'|53|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|53|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|||2.1.01.01.0001||');
     cntF++;
   });
   // F120: 17 fields
@@ -2028,8 +2034,9 @@ function gerarSPED(){
   if(bEner>0)add('M105','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0|');
 
   var darfPis=m.darfPisCum+m.darfPisNC;
-  add('M200',fmt(fat.pisCum+fat.pisNC)+'|'+fmt(c.pisTot)+'|0|'+fmt(darfPis)+'|0|0|'+fmt(darfPis)+'|'+fmt(ret.pis||0)+'|'+fmt(ret.pis||0)+'|0|0|'+fmt(darfPis));
-  add('M205','08|691201|'+fmt(darfPis));
+  // M200: vl_rec_tot|vl_cred|vl_ajus_dec|vl_cont_difer|vl_cont_difer_ant|vl_cont_difer_rec|vl_cont_difer_rec_ant|vl_ret|vl_ret_nc|vl_rec_rep|vl_cont_difer_r|vl_cont_difer_ant_r
+  add('M200',fmt(fat.pisCum+fat.pisNC+rf.pis)+'|'+fmt(c.pisTot*fator)+'|0|'+fmt(darfPis)+'|0|0|'+fmt(m.darfPisNC)+'|'+fmt(ret.pis||0)+'|'+fmt(ret.pis||0)+'|0|0|'+fmt(m.darfPisNC));
+  if(m.darfPisNC>0)add('M205','08|691201|'+fmt(m.darfPisNC));
   if(fat.nc>0)add('M210','01|'+fmt(fat.nc)+'|'+fmt(fat.nc)+'|0|0|'+fmt(fat.nc)+'|1,65|0||'+fmt(fat.pisNC)+'|0|0|0|0|'+fmt(fat.pisNC));
   if(rf.total>0)add('M210','02|'+fmt(rf.total)+'|'+fmt(rf.total)+'|0|0|'+fmt(rf.total)+'|0,65|0||'+fmt(rf.pis)+'|0|0|0|0|'+fmt(rf.pis));
   if(fat.cum>0)add('M210','51|'+fmt(fat.cum)+'|'+fmt(fat.cum)+'|0|0|'+fmt(fat.cum)+'|0,65|0||'+fmt(fat.pisCum)+'|0|0|0|0|'+fmt(fat.pisCum));
@@ -2044,8 +2051,8 @@ function gerarSPED(){
   if(bEner>0)add('M505','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0|');
 
   var darfCof=m.darfCofCum+m.darfCofNC;
-  add('M600',fmt(fat.cofCum+fat.cofNC)+'|'+fmt(c.cofTot)+'|0|'+fmt(darfCof)+'|0|0|'+fmt(darfCof)+'|'+fmt(ret.cof||0)+'|'+fmt(ret.cof||0)+'|0|0|'+fmt(darfCof));
-  add('M605','08|585601|'+fmt(darfCof));
+  add('M600',fmt(fat.cofCum+fat.cofNC+rf.cof)+'|'+fmt(c.cofTot*fator)+'|0|'+fmt(darfCof)+'|0|0|'+fmt(m.darfCofNC)+'|'+fmt(ret.cof||0)+'|'+fmt(ret.cof||0)+'|0|0|'+fmt(m.darfCofNC));
+  if(m.darfCofNC>0)add('M605','08|585601|'+fmt(m.darfCofNC));
   if(fat.nc>0)add('M610','01|'+fmt(fat.nc)+'|'+fmt(fat.nc)+'|0|0|'+fmt(fat.nc)+'|7,6|0||'+fmt(fat.cofNC)+'|0|0|0|0|'+fmt(fat.cofNC));
   if(rf.total>0)add('M610','02|'+fmt(rf.total)+'|'+fmt(rf.total)+'|0|0|'+fmt(rf.total)+'|4|0||'+fmt(rf.cof)+'|0|0|0|0|'+fmt(rf.cof));
   if(fat.cum>0)add('M610','51|'+fmt(fat.cum)+'|'+fmt(fat.cum)+'|0|0|'+fmt(fat.cum)+'|3|0||'+fmt(fat.cofCum)+'|0|0|0|0|'+fmt(fat.cofCum));
