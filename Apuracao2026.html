@@ -1970,10 +1970,9 @@ function gerarSPED(){
     var ap=isCum?'0,65':'1,65',ac=isCum?'3':'7,6';
     // A100: 21 fields
     add('A100','1|0|'+pC+'|00|1||'+nf.nf+'||'+nf.data.replace(/\//g,'')+'|'+nf.data.replace(/\//g,'')+
-      '|'+fmt(nf.valor)+'|0|0|'+fmt(nf.valor)+'|'+fmt(pis)+'|'+fmt(nf.valor)+'|'+fmt(cof)+'|'+fmt(pis)+'|'+fmt(cof)+'|'+fmt(nf.iss||0)+'|');
+      '|'+fmt(nf.valor)+'|0|0|'+fmt(nf.valor)+'|'+fmt(pis)+'|'+fmt(nf.valor)+'|'+fmt(cof)+'|'+fmt(pis)+'|'+fmt(cof)+'|'+fmt(nf.iss||0)+');
     // A170: 17 fields (ind_op|cod_item|desc_compl|vl_bc_pis|aliq_pis_pct|quant_bc_pis|vl_pis|cst_cofins|quant_bc_cofins|aliq_cofins_pct|vl_cofins|cod_cta|cod_centro|...)
-    var cod2=isCum?'107 Suporte tecnico manutencao e outros servicos em tecnolog':'105';
-    add('A170','1|'+cod2+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|');
+    add('A170','1|'+cod+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|');
     cntA+=2;
   });
   add('A990',String(cntA+3));
@@ -1997,16 +1996,16 @@ function gerarSPED(){
   var cntF=0;
   // F100: 18 fields (nat_rec|vl_tot|cod_cta|cod_centro|...)
   (rf.porConta||[]).forEach(function(pc){
-    add('F100','1|||'+dtFin+'|'+fmt(pc.valor)+'|02|'+fmt(pc.valor)+'|0,65|'+fmt(pc.valor*0.0065)+'|02|'+fmt(pc.valor)+'|4|'+fmt(pc.valor*0.04)+'|||'+pc.conta+'|');
+    add('F100','1|||'+dtFin+'|'+fmt(pc.valor)+'|02|'+fmt(pc.valor)+'|0,65|'+fmt(pc.valor*0.0065)+'|02|'+fmt(pc.valor)+'|4|'+fmt(pc.valor*0.04)+'|||'+pc.conta+'||');
     cntF++;
   });
   (c.itens||[]).filter(function(it){return it.tipo==='Aluguel';}).forEach(function(it){
-    add('F100','1|||'+dtFin+'|'+fmt(it.base)+'|03|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|03|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|||2.1.01.01.0001|');
+    add('F100','1|||'+dtFin+'|'+fmt(it.base)+'|03|'+fmt(it.base)+'|1,65|'+fmt(it.pis)+'|03|'+fmt(it.base)+'|7,6|'+fmt(it.cof)+'|||2.1.01.01.0001||');
     cntF++;
   });
   // F120: 17 fields
-  if((dep.maq||0)>0){add('F120','09|01||2|'+fmt(dep.maq)+'||53|'+fmt(dep.maq)+'|1,65|'+fmt(dep.pisMaq)+'|53|'+fmt(dep.maq)+'|7,6|'+fmt(dep.cofMaq)+'|3.3.01.13.0002|');cntF++;}
-  if((dep.comp||0)>0){add('F120','09|01||2|'+fmt(dep.comp)+'||53|'+fmt(dep.comp)+'|1,65|'+fmt(dep.pisComp)+'|53|'+fmt(dep.comp)+'|7,6|'+fmt(dep.cofComp)+'|3.3.01.13.0003|');cntF++;}
+  if((dep.maq||0)>0){add('F120','09|01||2|'+fmt(dep.maq)+'||53|'+fmt(dep.maq)+'|1,65|'+fmt(dep.pisMaq)+'|53|'+fmt(dep.maq)+'|7,6|'+fmt(dep.cofMaq)+'|3.3.01.13.0002||');cntF++;}
+  if((dep.comp||0)>0){add('F120','09|01||2|'+fmt(dep.comp)+'||53|'+fmt(dep.comp)+'|1,65|'+fmt(dep.pisComp)+'|53|'+fmt(dep.comp)+'|7,6|'+fmt(dep.cofComp)+'|3.3.01.13.0003||');cntF++;}
   add('F990',String(cntF+3));
   add('I001','1');add('I990','2');
 
