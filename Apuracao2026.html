@@ -1942,9 +1942,9 @@ function gerarSPED(){
   // 0100: 13 fields (nome|cpf|crc|cnpj|cep|end|num|compl|bairro|fone|fax|email|cod_mun)
   add('0100','BRUNA BARROTTI|36006490862|316244O6||||||||||');
   // 0110: 4 fields (tipo_inc_parc|num_reg_prev|num_reg_cumpr|ind_mov)  
-  add('0110','3|2|1|');
+  add('0110',(fat.cum>0?'3':'1')+'|2|1|');
   // 0111: 5 fields
-  add('0111',fmt(fat.nc+rf.total)+'|'+fmt(fat.cum)+'|'+fmt(fat.exp)+'|0|'+fmt(fat.total+rf.total));
+  add('0111',fmt(fat.nc+rf.total)+'|'+fmt(fat.cum)+'|0|'+fmt(fat.exp)+'|'+fmt(fat.total+rf.total));
   // 0140: 8 fields (ind_ativ|nome|cnpj|uf|ie|cod_mun|cnae|ie_st)
   add('0140','|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR||4106902|6967123|');
   // 0150: 12 fields (cod|nome|cod_pais|cnpj|cpf|ie|cod_mun|suframa|end|num|compl|bairro)
