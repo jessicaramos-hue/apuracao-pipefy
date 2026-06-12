@@ -1926,10 +1926,12 @@ function gerarSPED(){
   nfse.forEach(function(nf){if(nf.regime!=='Exportação'&&nf.cnpj)getP(nf.cnpj,nf.tomador,'SP','3550308');});
   (c.itens||[]).forEach(function(it){if(it.tipo==='Energia')getP('04368898000106','COPEL DISTRIBUICAO SA','PR','4106902');else if(it.tipo==='Aluguel'){
       var cnpjAlug='';
-      if(it.nome.toUpperCase().indexOf('GALVÃO')>=0||it.nome.toUpperCase().indexOf('GALVAO')>=0)cnpjAlug='12978183000101';
-      else if(it.nome.toUpperCase().indexOf('TRUE NORTH')>=0)cnpjAlug='51415694000169';
-      else if(it.nome.toUpperCase().indexOf('BEERORCOFFEE')>=0)cnpjAlug='27735662000102';
+      var nomeUp=it.nome.toUpperCase();
+      if(nomeUp.indexOf('GALVÃO')>=0||nomeUp.indexOf('GALVAO')>=0)cnpjAlug='12978183000101';
+      else if(nomeUp.indexOf('TRUE NORTH')>=0)cnpjAlug='51415694000169';
+      else if(nomeUp.indexOf('BEERORCOFFEE')>=0)cnpjAlug='18123640000154';
       if(cnpjAlug)getP(cnpjAlug,it.nome,'SP','3550308');
+      else getP('',it.nome,'SP','3550308');
     }});
   var linhas=[],cnt={};
   // add(): creates |REG|campos| — campos must have exact field count per layout
@@ -1948,7 +1950,7 @@ function gerarSPED(){
   // 0140: 8 fields (ind_ativ|nome|cnpj|uf|ie|cod_mun|cnae|ie_st)
   add('0140','|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR||4106902|6967123|');
   // 0150: 12 fields (cod|nome|cod_pais|cnpj|cpf|ie|cod_mun|suframa|end|num|compl|bairro)
-  Object.values(partic).forEach(function(p){if(!p.cnpj)return;add('0150',p.cod+'|'+p.nome+'|1058|'+p.cnpj+'|||'+p.mun+'|||SN||');});
+  Object.values(partic).forEach(function(p){if(!p.cnpj||p.cnpj.length<11)return;add('0150',p.cod+'|'+p.nome+'|1058|'+p.cnpj+'|||'+p.mun+'|||SN||');});
   add('0190','Srv|Servico');
   // 0200: 11 fields
   add('0200','Servicos de Aluguel Imovel|Property Rental Service|||Srv|10|||00||');
