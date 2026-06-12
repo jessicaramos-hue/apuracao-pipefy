@@ -1971,7 +1971,7 @@ function gerarSPED(){
     // A100: 21 fields
     add('A100','1|0|'+pC+'|00|1||'+nf.nf+'||'+nf.data.replace(/\//g,'')+'|'+nf.data.replace(/\//g,'')+
       '|'+fmt(nf.valor)+'|0|0|'+fmt(nf.valor)+'|'+fmt(pis)+'|'+fmt(nf.valor)+'|'+fmt(cof)+'|'+fmt(pis)+'|'+fmt(cof)+'|'+fmt(nf.iss||0));
-    var cod=isCum?'107 Suporte tecnico manutencao e outros servicos em tecnolog':'105';
+    // A170: 17 fields (ind_op|cod_item|desc_compl|vl_bc_pis|aliq_pis_pct|quant_bc_pis|vl_pis|cst_cofins|quant_bc_cofins|aliq_cofins_pct|vl_cofins|cod_cta|cod_centro|...)
     add('A170','1|'+cod+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|');
     cntA+=2;
   });
@@ -2063,14 +2063,17 @@ function gerarSPED(){
   add('9001','0');
   var regs=Object.keys(cnt).sort();
   regs.forEach(function(r){add('9900',r+'|'+cnt[r]);});
-  // Add counts for 9900, 9990, 9999 themselves
-  var n9900=regs.length+3; // +1 for 9900 self-ref, +1 for 9990, +1 for 9999 not included
-  add('9900','9900|'+String(n9900));
+  // 9900 self-count: regs + 3 (self + 9990 + 9999)
+  add('9900','9900|'+String(regs.length+3));
   add('9900','9990|1');
   add('9900','9999|1');
-  var tot=linhas.length+1;
-  add('9990',String(tot+1));
-  add('9999',String(tot+2));
+  // linhas so far = everything before 9990 and 9999
+  // bloco9_lines = 9001(1) + 9900s(regs.length+3) + 9990(1) + 9999(1)
+  var bloco9 = 1 + (regs.length+3) + 1 + 1; // = regs.length + 6
+  // total file lines = all lines before bloco9 + bloco9 lines
+  var totalLines = linhas.length + 2; // +1 for 9990, +1 for 9999
+  add('9990', String(bloco9));
+  add('9999', String(totalLines));
 
   var blob=new Blob([linhas.join('\r\n')+'\r\n'],{type:'text/plain;charset=utf-8'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
