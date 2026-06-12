@@ -1971,7 +1971,8 @@ function gerarSPED(){
     // A100: 21 fields
     add('A100','1|0|'+pC+'|00|1||'+nf.nf+'||'+nf.data.replace(/\//g,'')+'|'+nf.data.replace(/\//g,'')+
       '|'+fmt(nf.valor)+'|0|0|'+fmt(nf.valor)+'|'+fmt(pis)+'|'+fmt(nf.valor)+'|'+fmt(cof)+'|'+fmt(pis)+'|'+fmt(cof)+'|'+fmt(nf.iss||0));
-    // A170: 17 fields (ind_op|cod_item|desc_compl|vl_bc_pis|aliq_pis_pct|quant_bc_pis|vl_pis|cst_cofins|quant_bc_cofins|aliq_cofins_pct|vl_cofins|cod_cta|cod_centro|...)
+    var cod=isCum?'107 Suporte tecnico manutencao e outros servicos em tecnolog':'105';
+    // A170: 17 fields
     add('A170','1|'+cod+'||'+fmt(nf.valor)+'|0|||01|'+fmt(nf.valor)+'|'+ap+'|'+fmt(pis)+'|01|'+fmt(nf.valor)+'|'+ac+'|'+fmt(cof)+'|1.1.03.01.0001|');
     cntA+=2;
   });
