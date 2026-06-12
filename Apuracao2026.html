@@ -1942,9 +1942,9 @@ function gerarSPED(){
   // 0100: 13 fields (nome|cpf|crc|cnpj|cep|end|num|compl|bairro|fone|fax|email|cod_mun)
   add('0100','BRUNA BARROTTI|36006490862|316244O6||||||||||');
   // 0110: 4 fields (tipo_inc_parc|num_reg_prev|num_reg_cumpr|ind_mov)  
-  add('0110',(fat.cum>0?'3':'1')+'|2|1|');
+  add('0110','3|2|1|');
   // 0111: 5 fields
-  add('0111',fmt(fat.nc+rf.total)+'|'+(fat.cum>0?fmt(fat.cum):'0')+'|'+fmt(fat.exp)+'|0|'+fmt(fat.total+rf.total));
+  add('0111',fmt(fat.nc+rf.total)+'|'+fmt(fat.cum)+'|'+fmt(fat.exp)+'|0|'+fmt(fat.total+rf.total));
   // 0140: 8 fields (ind_ativ|nome|cnpj|uf|ie|cod_mun|cnae|ie_st)
   add('0140','|PIPEFY MARKETING E TECNOLOGIA LTDA|20504074000172|PR||4106902|6967123|');
   // 0150: 12 fields (cod|nome|cod_pais|cnpj|cpf|ie|cod_mun|suframa|end|num|compl|bairro)
@@ -2034,8 +2034,8 @@ function gerarSPED(){
   if(bEner>0)add('M105','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0|');
 
   var darfPis=m.darfPisCum+m.darfPisNC;
-  // M200: vl_rec_tot|vl_cred|vl_ajus_dec|vl_cont_difer|vl_cont_difer_ant|vl_cont_difer_rec|vl_cont_difer_rec_ant|vl_ret|vl_ret_nc|vl_rec_rep|vl_cont_difer_r|vl_cont_difer_ant_r
-  add('M200',fmt(fat.pisCum+fat.pisNC+rf.pis)+'|'+fmt(c.pisTot*fator)+'|0|'+fmt(darfPis)+'|0|0|'+fmt(m.darfPisNC)+'|'+fmt(ret.pis||0)+'|'+fmt(ret.pis||0)+'|0|0|'+fmt(m.darfPisNC));
+  // M200: vl_rec_tot|vl_cred|vl_ajus_dec|vl_cont_difer|vl_cont_difer_ant|vl_cont_difer_rec|vl_cont_rec|vl_ret|vl_ret_nc|vl_rec_rep|vl_cont_difer_r|vl_cont_difer_ant_r
+  add('M200',fmt(fat.pisNC+rf.pis)+'|'+fmt(c.pisTot*fator)+'|0|'+fmt(m.darfPisNC)+'|0|0|'+fmt(m.darfPisNC)+'|'+fmt(ret.pis||0)+'|'+fmt(ret.pis||0)+'|0|0|'+fmt(m.darfPisNC));
   if(m.darfPisNC>0)add('M205','08|691201|'+fmt(m.darfPisNC));
   if(fat.nc>0)add('M210','01|'+fmt(fat.nc)+'|'+fmt(fat.nc)+'|0|0|'+fmt(fat.nc)+'|1,65|0||'+fmt(fat.pisNC)+'|0|0|0|0|'+fmt(fat.pisNC));
   if(rf.total>0)add('M210','02|'+fmt(rf.total)+'|'+fmt(rf.total)+'|0|0|'+fmt(rf.total)+'|0,65|0||'+fmt(rf.pis)+'|0|0|0|0|'+fmt(rf.pis));
@@ -2051,7 +2051,7 @@ function gerarSPED(){
   if(bEner>0)add('M505','04|53|'+fmt(bEner)+'|'+fmt(bEner*(1-fator))+'|'+fmt(bEner*fator)+'|0||0|');
 
   var darfCof=m.darfCofCum+m.darfCofNC;
-  add('M600',fmt(fat.cofCum+fat.cofNC+rf.cof)+'|'+fmt(c.cofTot*fator)+'|0|'+fmt(darfCof)+'|0|0|'+fmt(m.darfCofNC)+'|'+fmt(ret.cof||0)+'|'+fmt(ret.cof||0)+'|0|0|'+fmt(m.darfCofNC));
+  add('M600',fmt(fat.cofNC+rf.cof)+'|'+fmt(c.cofTot*fator)+'|0|'+fmt(m.darfCofNC)+'|0|0|'+fmt(m.darfCofNC)+'|'+fmt(ret.cof||0)+'|'+fmt(ret.cof||0)+'|0|0|'+fmt(m.darfCofNC));
   if(m.darfCofNC>0)add('M605','08|585601|'+fmt(m.darfCofNC));
   if(fat.nc>0)add('M610','01|'+fmt(fat.nc)+'|'+fmt(fat.nc)+'|0|0|'+fmt(fat.nc)+'|7,6|0||'+fmt(fat.cofNC)+'|0|0|0|0|'+fmt(fat.cofNC));
   if(rf.total>0)add('M610','02|'+fmt(rf.total)+'|'+fmt(rf.total)+'|0|0|'+fmt(rf.total)+'|4|0||'+fmt(rf.cof)+'|0|0|0|0|'+fmt(rf.cof));
