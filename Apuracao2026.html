@@ -246,6 +246,8 @@ var NOMES_CONTA = {'3.3.02.02.0003':'Descontos Obtidos','3.3.02.02.0004':'Juros 
 
 var HIST = {};
 var S = {step:0, mes:'Jan', darfs:{}, open:{}};
+var REVIEWS = {};
+try { var _rev=localStorage.getItem('pipefy_reviews_2026'); if(_rev)REVIEWS=JSON.parse(_rev); } catch(e){}
 var tokenClient = null;
 var accessToken = null;
 var RET_UPLOAD  = null;
