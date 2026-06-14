@@ -2101,131 +2101,127 @@ function gerarSPED(){
 // ── LANÇAMENTOS NETSUITE ──────────────────────────────────────────────────
 function buildLancamentos(m) {
   if (!m) return [];
-  var fat  = m.fat, rf = m.recFin, c = m.cred, ret = m.ret;
-  var dep  = c.dep || {};
-  var fator = m.fator || 0;
-  var mes_ref = m.mesRef || '';
-  var mm = mes_ref.substring(0,3); // "Mai"
-  var mesNum = {'Jan':'01','Fev':'02','Mar':'03','Abr':'04','Mai':'05','Jun':'06','Jul':'07','Ago':'08','Set':'09','Out':'10','Nov':'11','Dez':'12'};
-  var mn = mesNum[mm] || '05';
-  var dtFin = new Date(2026, parseInt(mn)-1+1, 0); // last day of month
-  var dt = String(dtFin.getDate()).padStart(2,'0')+'/'+mn+'/2026';
+  var fat=m.fat, rf=m.recFin, c=m.cred, ret=m.ret, dep=c.dep||{};
+  var fator=m.fator||0;
+  var mes_ref=m.mesRef||'';
+  var mm=({'Jan':'01','Fev':'02','Mar':'03','Abr':'04','Mai':'05','Jun':'06','Jul':'07','Ago':'08','Set':'09','Out':'10','Nov':'11','Dez':'12'})[mes_ref.substring(0,3)]||'05';
+  var dtFin=new Date(2026,parseInt(mm),0);
+  var dt=String(dtFin.getDate()).padStart(2,'0')+'/'+mm+'/2026';
 
-  var pisUtil = c.pisUtil || Math.round(c.pisTot*fator*100)/100;
-  var cofUtil = c.cofUtil || Math.round(c.cofTot*fator*100)/100;
+  function r2(v){return Math.round((v||0)*100)/100;}
 
-  // Crédito depreciação pós-rateio
-  var pisDep  = Math.round((dep.pisMaq||0)*fator*100)/100 + Math.round((dep.pisComp||0)*fator*100)/100;
-  var cofDep  = Math.round((dep.cofMaq||0)*fator*100)/100 + Math.round((dep.cofComp||0)*fator*100)/100;
-  var pisDepMaq  = Math.round((dep.pisMaq||0)*fator*100)/100;
-  var cofDepMaq  = Math.round((dep.cofMaq||0)*fator*100)/100;
-  var pisDepComp = Math.round((dep.pisComp||0)*fator*100)/100;
-  var cofDepComp = Math.round((dep.cofComp||0)*fator*100)/100;
+  // Créditos depreciação BRUTOS (antes rateio)
+  var pisCompBruto = r2(dep.pisComp||0);
+  var cofCompBruto = r2(dep.cofComp||0);
+  var pisMaqBruto  = r2(dep.pisMaq||0);
+  var cofMaqBruto  = r2(dep.cofMaq||0);
 
-  // Crédito aluguel pós-rateio
-  var pisAlugUtil = Math.round(c.pisAlug*fator*100)/100;
-  var cofAlugUtil = Math.round(c.cofAlug*fator*100)/100;
+  // Créditos depreciação PÓS-RATEIO (utilizáveis)
+  var pisCompUtil = r2(pisCompBruto * fator);
+  var cofCompUtil = r2(cofCompBruto * fator);
+  var pisMaqUtil  = r2(pisMaqBruto  * fator);
+  var cofMaqUtil  = r2(cofMaqBruto  * fator);
+
+  // Base depreciação (pós-rateio)
+  var baseComp = dep.comp ? r2(dep.comp * fator) : 0;
+  var baseMaq  = dep.maq  ? r2(dep.maq  * fator) : 0;
+
+  // Créditos aluguel e energia BRUTOS
+  var pisAlugBruto = r2(c.pisAlug||0);
+  var cofAlugBruto = r2(c.cofAlug||0);
+  var pisEnerBruto = r2(c.pisEner||0);
+  var cofEnerBruto = r2(c.cofEner||0);
+
+  // Créditos aluguel e energia PÓS-RATEIO
+  var pisAlugUtil = r2(pisAlugBruto * fator);
+  var cofAlugUtil = r2(cofAlugBruto * fator);
+  var pisEnerUtil = r2(pisEnerBruto * fator);
+  var cofEnerUtil = r2(cofEnerBruto * fator);
+
   // Estorno = bruto - utilizável
-  var pisAlugEstorno = Math.round((c.pisAlug - pisAlugUtil)*100)/100;
-  var cofAlugEstorno = Math.round((c.cofAlug - cofAlugUtil)*100)/100;
+  var pisAlugEstorno = r2(pisAlugBruto - pisAlugUtil);
+  var cofAlugEstorno = r2(cofAlugBruto - cofAlugUtil);
+  var pisEnerEstorno = r2(pisEnerBruto - pisEnerUtil);
+  var cofEnerEstorno = r2(cofEnerBruto - cofEnerUtil);
 
-  // Crédito energia pós-rateio
-  var pisEnerUtil = Math.round(c.pisEner*fator*100)/100;
-  var cofEnerUtil = Math.round(c.cofEner*fator*100)/100;
-  var pisEnerEstorno = Math.round((c.pisEner - pisEnerUtil)*100)/100;
-  var cofEnerEstorno = Math.round((c.cofEner - cofEnerUtil)*100)/100;
+  // Crédito total utilizável (NC)
+  var pisUtil = r2(c.pisUtil || c.pisTot*fator);
+  var cofUtil = r2(c.cofUtil || c.cofTot*fator);
 
-  var memo_dep_comp  = 'CREDITOS PIS E COFINS - '+mn+'.2026- DEPRECIATION EXPENSE - COMPUTERS';
-  var memo_dep_maq   = 'CREDITOS PIS E COFINS - '+mn+'.2026 - DEPRECIATION EXPENSE - MACHINERY AND EQUIPEMENT';
-  var memo_estorno_alug = 'ESTORNO CREDITO PIS E COFINS '+mn+'.2026 ALUGUEL';
-  var memo_estorno_ener = 'ESTORNO CREDITO PIS E COFINS '+mn+'.2026 ENERGIA';
-  var memo_transf    = 'TRANSFERENCIA SALDO CREDOR PIS /COFINS '+mn+'.2026';
-  var memo_rf        = 'PIS _COFINS S/ RECEITAS FINANCEIRAS '+mn+'.2026';
-  var memo_fat       = 'TRANSFERENCIA DE SALDO CREDOR S/ FATURAMENTO '+mn+'.2026';
+  var memo_comp = 'CREDITOS PIS E COFINS - '+mm+'.2026- DEPRECIATION EXPENSE - COMPUTERS';
+  var memo_maq  = 'CREDITOS PIS E COFINS - '+mm+'.2026 - DEPRECIATION EXPENSE - MACHINERY AND EQUIPEMENT';
+  var memo_est_alug = 'ESTORNO CREDITO PIS E COFINS '+mm+'.2026 ALUGUEL';
+  var memo_est_ener = 'ESTORNO CREDITO PIS E COFINS '+mm+'.2026 ENERGIA';
+  var memo_rf   = 'PIS _COFINS S/ RECEITAS FINANCEIRAS '+mm+'.2026';
+  var memo_nc   = 'TRANSFERENCIA SALDO CREDOR PIS /COFINS '+mm+'.2026';
+  var memo_cum  = 'TRANSFERENCIA DE SALDO CREDOR S/ FATURAMENTO '+mm+'.2026';
 
   return [
     // 1. DEPRECIAÇÃO COMPUTADORES
+    // Débito: PIS A RECUPERAR + COFINS A RECUPERAR (contas de imposto)
+    // Crédito: DESPESA DE DEPRECIAÇÃO - COMPUTADORES (conta de despesa)
     {
-      id: 1,
-      titulo: 'Crédito Depreciação — Computadores',
-      memo: memo_dep_comp,
-      total_debito: Math.round((dep.comp||0)*100)/100,
-      total_credito: Math.round((pisDepComp+cofDepComp)*100)/100,
-      linhas: [
-        {conta:'3.3.01.13.0003', debito: Math.round((dep.comp||0)*100)/100, credito:'', memo: memo_dep_comp},
-        {conta:'1.1.04.01.0015', debito:'', credito: cofDepComp, memo: memo_dep_comp},
-        {conta:'1.1.04.01.0014', debito:'', credito: pisDepComp, memo: memo_dep_comp},
+      id:1, titulo:'Crédito Depreciação — Computadores', memo:memo_comp,
+      linhas:[
+        {conta:'1.1.04.01.0014', debito:pisCompUtil, credito:'', memo:memo_comp},
+        {conta:'1.1.04.01.0015', debito:cofCompUtil, credito:'', memo:memo_comp},
+        {conta:'3.3.01.13.0003', debito:'', credito:r2(pisCompUtil+cofCompUtil), memo:memo_comp},
       ]
     },
     // 2. DEPRECIAÇÃO MÁQUINAS
     {
-      id: 2,
-      titulo: 'Crédito Depreciação — Máquinas e Equipamentos',
-      memo: memo_dep_maq,
-      total_debito: Math.round((dep.maq||0)*100)/100,
-      total_credito: Math.round((pisDepMaq+cofDepMaq)*100)/100,
-      linhas: [
-        {conta:'3.3.01.13.0002', debito: Math.round((dep.maq||0)*100)/100, credito:'', memo: memo_dep_maq},
-        {conta:'1.1.04.01.0015', debito:'', credito: cofDepMaq, memo: memo_dep_maq},
-        {conta:'1.1.04.01.0014', debito:'', credito: pisDepMaq, memo: memo_dep_maq},
+      id:2, titulo:'Crédito Depreciação — Máquinas e Equipamentos', memo:memo_maq,
+      linhas:[
+        {conta:'1.1.04.01.0014', debito:pisMaqUtil, credito:'', memo:memo_maq},
+        {conta:'1.1.04.01.0015', debito:cofMaqUtil, credito:'', memo:memo_maq},
+        {conta:'3.3.01.13.0002', debito:'', credito:r2(pisMaqUtil+cofMaqUtil), memo:memo_maq},
       ]
     },
     // 3. ESTORNO ALUGUEL E ENERGIA
+    // Diferença = bruto - pós-rateio
+    // Débito: conta de despesa / Crédito: conta de imposto a recuperar
     {
-      id: 3,
-      titulo: 'Estorno Crédito Aluguel e Energia (ajuste rateio)',
-      memo: 'ESTORNO CREDITO PIS E COFINS '+mn+'.2026',
-      total_debito: Math.round((pisAlugEstorno+cofAlugEstorno+pisEnerEstorno+cofEnerEstorno)*100)/100,
-      total_credito: Math.round((pisAlugEstorno+cofAlugEstorno+pisEnerEstorno+cofEnerEstorno)*100)/100,
-      linhas: [
-        {conta:'1.2.03.01.0002', debito: Math.round((pisAlugEstorno+cofAlugEstorno)*100)/100, credito:'', memo: memo_estorno_alug},
-        {conta:'1.1.04.01.0014', debito:'', credito: pisAlugEstorno, memo: memo_estorno_alug},
-        {conta:'1.1.04.01.0015', debito:'', credito: cofAlugEstorno, memo: memo_estorno_alug},
-        {conta:'3.3.01.11.0003', debito: Math.round((pisEnerEstorno+cofEnerEstorno)*100)/100, credito:'', memo: memo_estorno_ener},
-        {conta:'1.1.04.01.0014', debito:'', credito: pisEnerEstorno, memo: memo_estorno_ener},
-        {conta:'1.1.04.01.0015', debito:'', credito: cofEnerEstorno, memo: memo_estorno_ener},
+      id:3, titulo:'Estorno Crédito Aluguel e Energia (ajuste rateio)', memo:'ESTORNO CREDITO PIS E COFINS '+mm+'.2026',
+      linhas:[
+        {conta:'1.2.03.01.0002', debito:r2(pisAlugEstorno+cofAlugEstorno), credito:'', memo:memo_est_alug},
+        {conta:'1.1.04.01.0014', debito:'', credito:pisAlugEstorno, memo:memo_est_alug},
+        {conta:'1.1.04.01.0015', debito:'', credito:cofAlugEstorno, memo:memo_est_alug},
+        {conta:'3.3.01.11.0003', debito:r2(pisEnerEstorno+cofEnerEstorno), credito:'', memo:memo_est_ener},
+        {conta:'1.1.04.01.0014', debito:'', credito:pisEnerEstorno, memo:memo_est_ener},
+        {conta:'1.1.04.01.0015', debito:'', credito:cofEnerEstorno, memo:memo_est_ener},
       ]
     },
     // 4. RECEITAS FINANCEIRAS
+    // Débito: PIS/COFINS SOBRE RECEITAS / Crédito: NC A RECOLHER
     {
-      id: 4,
-      titulo: 'PIS/COFINS sobre Receitas Financeiras',
-      memo: memo_rf,
-      total_debito: Math.round((rf.pis+rf.cof)*100)/100,
-      total_credito: Math.round((rf.pis+rf.cof)*100)/100,
-      linhas: [
-        {conta:'3.3.02.01.0008', debito: rf.pis, credito:'', memo: memo_rf},
-        {conta:'3.3.02.01.0002', debito: rf.cof, credito:'', memo: memo_rf},
-        {conta:'2.1.03.01.0010', debito:'', credito: rf.pis, memo: memo_rf},
-        {conta:'2.1.03.01.0011', debito:'', credito: rf.cof, memo: memo_rf},
+      id:4, titulo:'PIS/COFINS sobre Receitas Financeiras', memo:memo_rf,
+      linhas:[
+        {conta:'3.3.02.01.0008', debito:r2(rf.pis||0), credito:'', memo:memo_rf},
+        {conta:'3.3.02.01.0002', debito:r2(rf.cof||0), credito:'', memo:memo_rf},
+        {conta:'2.1.03.01.0010', debito:'', credito:r2(rf.pis||0), memo:memo_rf},
+        {conta:'2.1.03.01.0011', debito:'', credito:r2(rf.cof||0), memo:memo_rf},
       ]
     },
-    // 5. TRANSFERÊNCIA SALDO CREDOR (créditos NC)
+    // 5. TRANSFERÊNCIA SALDO CREDOR NC
+    // Débito: PIS/COFINS NC A RECOLHER / Crédito: PIS/COFINS A RECUPERAR
     {
-      id: 5,
-      titulo: 'Transferência Saldo Credor PIS/COFINS (Créditos NC)',
-      memo: memo_transf,
-      total_debito: Math.round((pisUtil+cofUtil)*100)/100,
-      total_credito: Math.round((pisUtil+cofUtil)*100)/100,
-      linhas: [
-        {conta:'1.1.04.01.0014', debito: pisUtil, credito:'', memo: memo_transf},
-        {conta:'1.1.04.01.0015', debito: cofUtil, credito:'', memo: memo_transf},
-        {conta:'2.1.03.01.0010', debito:'', credito: pisUtil, memo: memo_transf},
-        {conta:'2.1.03.01.0011', debito:'', credito: cofUtil, memo: memo_transf},
+      id:5, titulo:'Transferência Saldo Credor PIS/COFINS (Créditos NC)', memo:memo_nc,
+      linhas:[
+        {conta:'2.1.03.01.0010', debito:pisUtil, credito:'', memo:memo_nc},
+        {conta:'2.1.03.01.0011', debito:cofUtil, credito:'', memo:memo_nc},
+        {conta:'1.1.04.01.0014', debito:'', credito:pisUtil, memo:memo_nc},
+        {conta:'1.1.04.01.0015', debito:'', credito:cofUtil, memo:memo_nc},
       ]
     },
-    // 6. TRANSFERÊNCIA SALDO CREDOR FATURAMENTO (retenções CUM)
+    // 6. TRANSFERÊNCIA SALDO CREDOR FATURAMENTO (Retenções CUM)
+    // Débito: PIS/COFINS CUM A RECOLHER / Crédito: PIS/COFINS S/ FATURAMENTO A RECUPERAR
     {
-      id: 6,
-      titulo: 'Transferência Saldo Credor s/ Faturamento (Retenções CUM)',
-      memo: memo_fat,
-      total_debito: Math.round(((ret.pis||0)+(ret.cof||0))*100)/100,
-      total_credito: Math.round(((ret.pis||0)+(ret.cof||0))*100)/100,
-      linhas: [
-        {conta:'1.1.04.01.0024', debito: ret.pis||0, credito:'', memo: memo_fat},
-        {conta:'2.1.03.01.0014', debito:'', credito: ret.pis||0, memo: memo_fat},
-        {conta:'1.1.04.01.0025', debito: ret.cof||0, credito:'', memo: memo_fat},
-        {conta:'2.1.03.01.0015', debito:'', credito: ret.cof||0, memo: memo_fat},
+      id:6, titulo:'Transferência Saldo Credor s/ Faturamento (Retenções CUM)', memo:memo_cum,
+      linhas:[
+        {conta:'2.1.03.01.0014', debito:r2(ret.pis||0), credito:'', memo:memo_cum},
+        {conta:'1.1.04.01.0024', debito:'', credito:r2(ret.pis||0), memo:memo_cum},
+        {conta:'2.1.03.01.0015', debito:r2(ret.cof||0), credito:'', memo:memo_cum},
+        {conta:'1.1.04.01.0025', debito:'', credito:r2(ret.cof||0), memo:memo_cum},
       ]
     },
   ];
