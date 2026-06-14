@@ -1454,7 +1454,7 @@ function selecionarMes(key) {
 function setStep(s) {
   S.step=s;
   document.querySelectorAll('.sb-item').forEach(function(el,i){el.classList.toggle('active',i===s);});
-  document.getElementById('tb-title').textContent=['Apuração Consolidada','Visão Anual','DARFs e Comprovantes','Exportar','Conciliação Fiscal'][s];
+  document.getElementById('tb-title').textContent=['Apuração Consolidada','Visão Anual','DARFs e Comprovantes','Exportar','Conciliação Fiscal','Lançamentos NetSuite'][s];
   render();
 }
 
@@ -1483,7 +1483,7 @@ function buildSidebar() {
 }
 
 function render() {
-  document.getElementById('content').innerHTML=[step0,step1,step2,step3,step4][S.step]();
+  document.getElementById('content').innerHTML=[step0,step1,step2,step3,step4,step5][S.step]();
   var up=document.getElementById('darf-upload');
   if(up) up.addEventListener('change',async function(e){
     for(var i=0;i<e.target.files.length;i++) await processarDarf(e.target.files[i],S.mes);
@@ -2094,6 +2094,282 @@ function gerarSPED(){
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='SPED_Contribuicoes_'+mm+ano+'_Pipefy.txt';a.click();
   showStatus('📄 SPED gerado: SPED_Contribuicoes_'+mm+ano+'_Pipefy.txt');
+}
+
+
+// ── LANÇAMENTOS NETSUITE ──────────────────────────────────────────────────
+function buildLancamentos(m) {
+  if (!m) return [];
+  var fat  = m.fat, rf = m.recFin, c = m.cred, ret = m.ret;
+  var dep  = c.dep || {};
+  var fator = m.fator || 0;
+  var mes_ref = m.mesRef || '';
+  var mm = mes_ref.substring(0,3); // "Mai"
+  var mesNum = {'Jan':'01','Fev':'02','Mar':'03','Abr':'04','Mai':'05','Jun':'06','Jul':'07','Ago':'08','Set':'09','Out':'10','Nov':'11','Dez':'12'};
+  var mn = mesNum[mm] || '05';
+  var dtFin = new Date(2026, parseInt(mn)-1+1, 0); // last day of month
+  var dt = String(dtFin.getDate()).padStart(2,'0')+'/'+mn+'/2026';
+
+  var pisUtil = c.pisUtil || Math.round(c.pisTot*fator*100)/100;
+  var cofUtil = c.cofUtil || Math.round(c.cofTot*fator*100)/100;
+
+  // Crédito depreciação pós-rateio
+  var pisDep  = Math.round((dep.pisMaq||0)*fator*100)/100 + Math.round((dep.pisComp||0)*fator*100)/100;
+  var cofDep  = Math.round((dep.cofMaq||0)*fator*100)/100 + Math.round((dep.cofComp||0)*fator*100)/100;
+  var pisDepMaq  = Math.round((dep.pisMaq||0)*fator*100)/100;
+  var cofDepMaq  = Math.round((dep.cofMaq||0)*fator*100)/100;
+  var pisDepComp = Math.round((dep.pisComp||0)*fator*100)/100;
+  var cofDepComp = Math.round((dep.cofComp||0)*fator*100)/100;
+
+  // Crédito aluguel pós-rateio
+  var pisAlugUtil = Math.round(c.pisAlug*fator*100)/100;
+  var cofAlugUtil = Math.round(c.cofAlug*fator*100)/100;
+  // Estorno = bruto - utilizável
+  var pisAlugEstorno = Math.round((c.pisAlug - pisAlugUtil)*100)/100;
+  var cofAlugEstorno = Math.round((c.cofAlug - cofAlugUtil)*100)/100;
+
+  // Crédito energia pós-rateio
+  var pisEnerUtil = Math.round(c.pisEner*fator*100)/100;
+  var cofEnerUtil = Math.round(c.cofEner*fator*100)/100;
+  var pisEnerEstorno = Math.round((c.pisEner - pisEnerUtil)*100)/100;
+  var cofEnerEstorno = Math.round((c.cofEner - cofEnerUtil)*100)/100;
+
+  var memo_dep_comp  = 'CREDITOS PIS E COFINS - '+mn+'.2026- DEPRECIATION EXPENSE - COMPUTERS';
+  var memo_dep_maq   = 'CREDITOS PIS E COFINS - '+mn+'.2026 - DEPRECIATION EXPENSE - MACHINERY AND EQUIPEMENT';
+  var memo_estorno_alug = 'ESTORNO CREDITO PIS E COFINS '+mn+'.2026 ALUGUEL';
+  var memo_estorno_ener = 'ESTORNO CREDITO PIS E COFINS '+mn+'.2026 ENERGIA';
+  var memo_transf    = 'TRANSFERENCIA SALDO CREDOR PIS /COFINS '+mn+'.2026';
+  var memo_rf        = 'PIS _COFINS S/ RECEITAS FINANCEIRAS '+mn+'.2026';
+  var memo_fat       = 'TRANSFERENCIA DE SALDO CREDOR S/ FATURAMENTO '+mn+'.2026';
+
+  return [
+    // 1. DEPRECIAÇÃO COMPUTADORES
+    {
+      id: 1,
+      titulo: 'Crédito Depreciação — Computadores',
+      memo: memo_dep_comp,
+      total_debito: Math.round((dep.comp||0)*100)/100,
+      total_credito: Math.round((pisDepComp+cofDepComp)*100)/100,
+      linhas: [
+        {conta:'3.3.01.13.0003', debito: Math.round((dep.comp||0)*100)/100, credito:'', memo: memo_dep_comp},
+        {conta:'1.1.04.01.0015', debito:'', credito: cofDepComp, memo: memo_dep_comp},
+        {conta:'1.1.04.01.0014', debito:'', credito: pisDepComp, memo: memo_dep_comp},
+      ]
+    },
+    // 2. DEPRECIAÇÃO MÁQUINAS
+    {
+      id: 2,
+      titulo: 'Crédito Depreciação — Máquinas e Equipamentos',
+      memo: memo_dep_maq,
+      total_debito: Math.round((dep.maq||0)*100)/100,
+      total_credito: Math.round((pisDepMaq+cofDepMaq)*100)/100,
+      linhas: [
+        {conta:'3.3.01.13.0002', debito: Math.round((dep.maq||0)*100)/100, credito:'', memo: memo_dep_maq},
+        {conta:'1.1.04.01.0015', debito:'', credito: cofDepMaq, memo: memo_dep_maq},
+        {conta:'1.1.04.01.0014', debito:'', credito: pisDepMaq, memo: memo_dep_maq},
+      ]
+    },
+    // 3. ESTORNO ALUGUEL E ENERGIA
+    {
+      id: 3,
+      titulo: 'Estorno Crédito Aluguel e Energia (ajuste rateio)',
+      memo: 'ESTORNO CREDITO PIS E COFINS '+mn+'.2026',
+      total_debito: Math.round((pisAlugEstorno+cofAlugEstorno+pisEnerEstorno+cofEnerEstorno)*100)/100,
+      total_credito: Math.round((pisAlugEstorno+cofAlugEstorno+pisEnerEstorno+cofEnerEstorno)*100)/100,
+      linhas: [
+        {conta:'1.2.03.01.0002', debito: Math.round((pisAlugEstorno+cofAlugEstorno)*100)/100, credito:'', memo: memo_estorno_alug},
+        {conta:'1.1.04.01.0014', debito:'', credito: pisAlugEstorno, memo: memo_estorno_alug},
+        {conta:'1.1.04.01.0015', debito:'', credito: cofAlugEstorno, memo: memo_estorno_alug},
+        {conta:'3.3.01.11.0003', debito: Math.round((pisEnerEstorno+cofEnerEstorno)*100)/100, credito:'', memo: memo_estorno_ener},
+        {conta:'1.1.04.01.0014', debito:'', credito: pisEnerEstorno, memo: memo_estorno_ener},
+        {conta:'1.1.04.01.0015', debito:'', credito: cofEnerEstorno, memo: memo_estorno_ener},
+      ]
+    },
+    // 4. RECEITAS FINANCEIRAS
+    {
+      id: 4,
+      titulo: 'PIS/COFINS sobre Receitas Financeiras',
+      memo: memo_rf,
+      total_debito: Math.round((rf.pis+rf.cof)*100)/100,
+      total_credito: Math.round((rf.pis+rf.cof)*100)/100,
+      linhas: [
+        {conta:'3.3.02.01.0008', debito: rf.pis, credito:'', memo: memo_rf},
+        {conta:'3.3.02.01.0002', debito: rf.cof, credito:'', memo: memo_rf},
+        {conta:'2.1.03.01.0010', debito:'', credito: rf.pis, memo: memo_rf},
+        {conta:'2.1.03.01.0011', debito:'', credito: rf.cof, memo: memo_rf},
+      ]
+    },
+    // 5. TRANSFERÊNCIA SALDO CREDOR (créditos NC)
+    {
+      id: 5,
+      titulo: 'Transferência Saldo Credor PIS/COFINS (Créditos NC)',
+      memo: memo_transf,
+      total_debito: Math.round((pisUtil+cofUtil)*100)/100,
+      total_credito: Math.round((pisUtil+cofUtil)*100)/100,
+      linhas: [
+        {conta:'1.1.04.01.0014', debito: pisUtil, credito:'', memo: memo_transf},
+        {conta:'1.1.04.01.0015', debito: cofUtil, credito:'', memo: memo_transf},
+        {conta:'2.1.03.01.0010', debito:'', credito: pisUtil, memo: memo_transf},
+        {conta:'2.1.03.01.0011', debito:'', credito: cofUtil, memo: memo_transf},
+      ]
+    },
+    // 6. TRANSFERÊNCIA SALDO CREDOR FATURAMENTO (retenções CUM)
+    {
+      id: 6,
+      titulo: 'Transferência Saldo Credor s/ Faturamento (Retenções CUM)',
+      memo: memo_fat,
+      total_debito: Math.round(((ret.pis||0)+(ret.cof||0))*100)/100,
+      total_credito: Math.round(((ret.pis||0)+(ret.cof||0))*100)/100,
+      linhas: [
+        {conta:'1.1.04.01.0024', debito: ret.pis||0, credito:'', memo: memo_fat},
+        {conta:'2.1.03.01.0014', debito:'', credito: ret.pis||0, memo: memo_fat},
+        {conta:'1.1.04.01.0025', debito: ret.cof||0, credito:'', memo: memo_fat},
+        {conta:'2.1.03.01.0015', debito:'', credito: ret.cof||0, memo: memo_fat},
+      ]
+    },
+  ];
+}
+
+function fmtBRL(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  return Number(v).toFixed(2).replace('.', ',');
+}
+
+function downloadCSV(lancamento, dt) {
+  var header = 'Memo Corpo,PIPEFY INC,Data,ID Conta,ID centro de custo,Credito,Debito,Memo Linha';
+  var rows = [header];
+  lancamento.linhas.forEach(function(l, i) {
+    rows.push([
+      i === 0 ? '"' + lancamento.memo + '"' : '',
+      i === 0 ? 'PIPEFY LTDA' : '',
+      i === 0 ? dt : '',
+      l.conta,
+      '',
+      l.credito !== '' ? fmtBRL(l.credito) : '',
+      l.debito !== '' ? fmtBRL(l.debito) : '',
+      '"' + l.memo + '"'
+    ].join(','));
+  });
+  var csv = rows.join('
+');
+  var blob = new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Lancamento_' + lancamento.id + '_' + lancamento.titulo.replace(/[^a-zA-Z0-9]/g,'_').substring(0,30) + '.csv';
+  a.click();
+  showStatus('📥 CSV baixado: ' + lancamento.titulo);
+}
+
+function downloadAllCSV(lancamentos, dt) {
+  var header = 'Memo Corpo,PIPEFY INC,Data,ID Conta,ID centro de custo,Credito,Debito,Memo Linha';
+  var rows = [header];
+  lancamentos.forEach(function(lanc) {
+    lanc.linhas.forEach(function(l, i) {
+      rows.push([
+        i === 0 ? '"' + lanc.memo + '"' : '',
+        i === 0 ? 'PIPEFY LTDA' : '',
+        i === 0 ? dt : '',
+        l.conta,
+        '',
+        l.credito !== '' ? fmtBRL(l.credito) : '',
+        l.debito !== '' ? fmtBRL(l.debito) : '',
+        '"' + l.memo + '"'
+      ].join(','));
+    });
+    rows.push(',,,,,,,' ); // blank line between entries
+  });
+  var csv = rows.join('
+');
+  var blob = new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Lancamentos_NetSuite_' + (S.mes||'') + '_2026.csv';
+  a.click();
+  showStatus('📥 Todos os lançamentos baixados!');
+}
+
+function step5() {
+  var m = HIST[S.mes];
+  if (!m) return '<div class="card"><div class="card-body"><p style="color:#888">Selecione um mês.</p></div></div>';
+
+  if (['Jan','Fev','Mar','Abr'].indexOf(S.mes) >= 0) {
+    return '<div class="card"><div class="card-hdr"><div class="card-title">📒 Lançamentos NetSuite — '+m.mesRef+'</div></div>'+
+      '<div class="card-body" style="text-align:center;padding:40px">'+
+      '<div style="font-size:32px;margin-bottom:12px">📋</div>'+
+      '<div style="font-size:13px;color:#888">Disponível a partir de Maio/2026.</div>'+
+      '</div></div>';
+  }
+
+  var mesNum = {'Jan':'01','Fev':'02','Mar':'03','Abr':'04','Mai':'05','Jun':'06','Jul':'07','Ago':'08','Set':'09','Out':'10','Nov':'11','Dez':'12'};
+  var mn = mesNum[S.mes] || '05';
+  var dtFin = new Date(2026, parseInt(mn)-1+1, 0);
+  var dt = String(dtFin.getDate()).padStart(2,'0')+'/'+mn+'/2026';
+
+  var lancamentos = buildLancamentos(m);
+  var h = '';
+
+  // Header com botão baixar tudo
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+    '<div>'+
+    '<div style="font-size:16px;font-weight:700;color:#001F5B">📒 Lançamentos NetSuite — '+m.mesRef+'</div>'+
+    '<div style="font-size:11px;color:#888;margin-top:2px">Data de lançamento: '+dt+' · Subsidiária: PIPEFY LTDA</div>'+
+    '</div>'+
+    '<button class="btn" style="background:#001F5B;color:#fff;font-size:12px;padding:9px 18px" onclick="downloadAllCSV(window._lancamentos,''+dt+'')">'+
+    '📥 Baixar Todos os CSVs</button>'+
+    '</div>';
+
+  lancamentos.forEach(function(lanc) {
+    var totalDeb = lanc.linhas.reduce(function(s,l){return s+(l.debito!==''?parseFloat(l.debito)||0:0);},0);
+    var totalCred = lanc.linhas.reduce(function(s,l){return s+(l.credito!==''?parseFloat(l.credito)||0:0);},0);
+    var ok = Math.abs(totalDeb - totalCred) < 0.02;
+
+    h += '<div class="card" style="margin-bottom:12px">'+
+      '<div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between">'+
+      '<div>'+
+      '<div class="card-title">'+lanc.id+'. '+lanc.titulo+'</div>'+
+      '<div style="font-size:10px;color:#888;margin-top:2px">'+lanc.memo+'</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+      (ok ? '<span style="background:#D4EDDA;color:#1A7340;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">✅ Balanceado</span>' :
+            '<span style="background:#FADBD8;color:#922B21;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">⚠️ Desbalanceado</span>')+
+      '<button class="btn btn-gold" style="font-size:10px;padding:5px 12px" onclick="downloadCSV(window._lancamentos['+(lanc.id-1)+'],''+dt+'')">📥 CSV</button>'+
+      '</div>'+
+      '</div>'+
+      '<div class="card-body" style="padding:0">'+
+      '<table class="ap" style="font-size:11px">'+
+      '<thead><tr>'+
+      '<th class="tdesc" style="background:#001F5B;text-align:left;min-width:160px">Conta</th>'+
+      '<th style="background:#001F5B;color:#fff;text-align:right;width:160px">Débito</th>'+
+      '<th style="background:#001F5B;color:#fff;text-align:right;width:160px">Crédito</th>'+
+      '<th class="tdesc" style="background:#001F5B;text-align:left">Memorando</th>'+
+      '</tr></thead><tbody>';
+
+    lanc.linhas.forEach(function(l, i) {
+      var bg = i%2===0 ? '#fff' : '#F5F6FA';
+      h += '<tr style="background:'+bg+'">'+
+        '<td style="font-weight:600;color:#001F5B;font-family:monospace">'+l.conta+'</td>'+
+        '<td style="text-align:right;color:'+(l.debito!==''?'#922B21':'#ccc')+'">'+
+        (l.debito!==''?BRL(l.debito):'-')+'</td>'+
+        '<td style="text-align:right;color:'+(l.credito!==''?'#1A7340':'#ccc')+'">'+
+        (l.credito!==''?BRL(l.credito):'-')+'</td>'+
+        '<td style="font-size:10px;color:#666">'+l.memo+'</td>'+
+        '</tr>';
+    });
+
+    // Total row
+    h += '<tr style="background:#FFF3CD;border-top:2px solid #C8962E">'+
+      '<td style="font-weight:700;color:#7A5A00">TOTAL</td>'+
+      '<td style="text-align:right;font-weight:700;color:#7A5A00">'+BRL(totalDeb)+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#7A5A00">'+BRL(totalCred)+'</td>'+
+      '<td></td>'+
+      '</tr>';
+
+    h += '</tbody></table></div></div>';
+  });
+
+  // Store lancamentos globally for download
+  window._lancamentos = lancamentos;
+  return h;
 }
 
 buildSidebar(); updateHeader(); render();
