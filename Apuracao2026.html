@@ -602,12 +602,15 @@ function buildHist(FAT,RF,CRED,DEP,RET) {
     var dPN=Math.max(0,f.pisNC+rf.pis-pisUtil);
     var dCN=Math.max(0,f.cofNC+rf.cof-cofUtil);
     var tot=dPC+dCC+dPN+dCN+f.iss+f.inss;
+    var pisUtil_=Math.round(c.pisTot*fator*100)/100;
+    var cofUtil_=Math.round(c.cofTot*fator*100)/100;
+    c.pisUtil=pisUtil_; c.cofUtil=cofUtil_;
     H[m]={
       mesRef:MESES_FULL[m]||m+'/2026',
       fat:f, nfse:f.nfs,
       recFin:{total:rf.total,pis:rf.pis,cof:rf.cof,
               porConta:Object.keys(rf.pc).map(function(k){return {conta:k,nome:NOMES_CONTA[k]||k,valor:rf.pc[k]};})},
-      cred:c, ret:ret,
+      cred:c, ret:ret, fator:fator,
       totDebPis:f.pisCum+f.pisNC+rf.pis, totDebCof:f.cofCum+f.cofNC+rf.cof,
       darfPisCum:dPC,darfCofCum:dCC,darfPisNC:dPN,darfCofNC:dCN,
       iss:f.iss,inss:f.inss,total:tot,
