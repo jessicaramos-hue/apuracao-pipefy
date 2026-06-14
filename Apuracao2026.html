@@ -2250,8 +2250,7 @@ function downloadCSV(lancamento, dt) {
       '"' + l.memo + '"'
     ].join(','));
   });
-  var csv = rows.join('
-');
+  var csv = rows.join('\n');
   var blob = new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2278,8 +2277,7 @@ function downloadAllCSV(lancamentos, dt) {
     });
     rows.push(',,,,,,,' ); // blank line between entries
   });
-  var csv = rows.join('
-');
+  var csv = rows.join('\n');
   var blob = new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2309,12 +2307,13 @@ function step5() {
   var h = '';
 
   // Header com botão baixar tudo
+  window._dt = dt;
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
     '<div>'+
     '<div style="font-size:16px;font-weight:700;color:#001F5B">📒 Lançamentos NetSuite — '+m.mesRef+'</div>'+
     '<div style="font-size:11px;color:#888;margin-top:2px">Data de lançamento: '+dt+' · Subsidiária: PIPEFY LTDA</div>'+
     '</div>'+
-    '<button class="btn" style="background:#001F5B;color:#fff;font-size:12px;padding:9px 18px" onclick="downloadAllCSV(window._lancamentos,''+dt+'')">'+
+    '<button class="btn" style="background:#001F5B;color:#fff;font-size:12px;padding:9px 18px" onclick="downloadAllCSV(window._lancamentos,window._dt)">'+
     '📥 Baixar Todos os CSVs</button>'+
     '</div>';
 
@@ -2332,7 +2331,7 @@ function step5() {
       '<div style="display:flex;align-items:center;gap:10px">'+
       (ok ? '<span style="background:#D4EDDA;color:#1A7340;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">✅ Balanceado</span>' :
             '<span style="background:#FADBD8;color:#922B21;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">⚠️ Desbalanceado</span>')+
-      '<button class="btn btn-gold" style="font-size:10px;padding:5px 12px" onclick="downloadCSV(window._lancamentos['+(lanc.id-1)+'],''+dt+'')">📥 CSV</button>'+
+      '<button class="btn btn-gold" style="font-size:10px;padding:5px 12px" onclick="downloadCSV(window._lancamentos['+(lanc.id-1)+'],window._dt)">📥 CSV</button>'+
       '</div>'+
       '</div>'+
       '<div class="card-body" style="padding:0">'+
