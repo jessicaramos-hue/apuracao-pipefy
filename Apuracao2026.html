@@ -232,7 +232,7 @@ table.ann .tot-row td{background:#C8962E!important;color:#fff!important;font-wei
 // ── CONFIG ─────────────────────────────────────────────────────────────────
 var CLIENT_ID = '319783809871-hpqnvd9aue9c15kfmpjqei5khkq58bk8.apps.googleusercontent.com';
 var SHEET_ID  = '1Hpi0j90MtrgLgx0MbI6QnHdb4rp6pZb8x0F90c0vBlE';
-var SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+var SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.send';
 var MESES_ALL = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 var MESES_FULL = {Jan:'Janeiro/2026',Fev:'Fevereiro/2026',Mar:'Março/2026',Abr:'Abril/2026',
                   Mai:'Maio/2026',Jun:'Junho/2026',Jul:'Julho/2026',Ago:'Agosto/2026',
@@ -2392,7 +2392,10 @@ function doReview(mes){
   if(!REVIEWS[mes])REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
   REVIEWS[mes].status='reviewed';
   REVIEWS[mes].reviewer={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
-  saveReviews();showStatus('✅ Revisão registrada por '+name);buildSidebar();render();
+  saveReviews();showStatus('✅ Revisão registrada por '+name);
+  var dest=CFG.emailGerente||'';
+  if(dest)sendEmailNotification('revisao',mes,name+'<'+email+'>',dest,comment);
+  buildSidebar();render();
 }
 function doApprove(mes){
   var comment=document.getElementById('approve-comment-input').value.trim();
@@ -2403,19 +2406,106 @@ function doApprove(mes){
   if(rev.status!=='reviewed'){showStatus('Aguardando revisão primeiro',true);return;}
   REVIEWS[mes].status='approved';
   REVIEWS[mes].approver={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
-  saveReviews();showStatus('🔒 Aprovado por '+name);buildSidebar();render();
+  saveReviews();showStatus('🔒 Aprovado por '+name);
+  var dest=CFG.emailAnalista||'';
+  if(dest)sendEmailNotification('aprovacao',mes,name+'<'+email+'>',dest,comment);
+  buildSidebar();render();
 }
 function undoReview(mes){
   REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
   saveReviews();buildSidebar();render();
 }
 
+
+// ── CONFIGURAÇÕES DE EMAIL ────────────────────────────────────────────────
+var CFG = {};
+try { var _cfg=localStorage.getItem('pipefy_cfg'); if(_cfg)CFG=JSON.parse(_cfg); } catch(e){}
+
+function saveCFG(){ try{localStorage.setItem('pipefy_cfg',JSON.stringify(CFG));}catch(e){} }
+
+function sendEmailNotification(tipo, mes, remetente, destinatario, comentario) {
+  if (!destinatario) return;
+  if (!accessToken) return;
+  var m = HIST[mes];
+  var mesRef = m ? m.mesRef : mes;
+  var total = m ? BRL(m.total) : '';
+  var assunto, corpo;
+  if (tipo === 'revisao') {
+    assunto = 'Apuracao Tributaria ' + mesRef + ' - Aguardando Aprovacao';
+    corpo = 'Ola,\n\n' +
+      remetente + ' revisou a apuracao tributaria de ' + mesRef + '.\n\n' +
+      'Total a recolher: ' + total + '\n\n' +
+      'Comentario: ' + comentario + '\n\n' +
+      'Por favor acesse o app para aprovar:\n' +
+      'https://jessicaramos-hue.github.io/apuracao-pipefy/Apuracao2026.html\n\n' +
+      'Atenciosamente,\nApp Apuracao Tributaria Pipefy 2026';
+  } else {
+    assunto = 'Apuracao Tributaria ' + mesRef + ' - Aprovada';
+    corpo = 'Ola,\n\n' +
+      remetente + ' aprovou a apuracao tributaria de ' + mesRef + '.\n\n' +
+      'Total a recolher: ' + total + '\n\n' +
+      'Comentario: ' + comentario + '\n\n' +
+      'Atenciosamente,\nApp Apuracao Tributaria Pipefy 2026';
+  }
+  // Build RFC 2822 email
+  var email = [
+    'From: ' + remetente,
+    'To: ' + destinatario,
+    'Subject: =?UTF-8?B?' + btoa(unescape(encodeURIComponent(assunto))) + '?=',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    corpo
+  ].join('\r\n');
+  var encoded = btoa(unescape(encodeURIComponent(email)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw: encoded })
+  }).then(function(r){
+    if(r.ok) showStatus('📧 Email enviado para ' + destinatario);
+    else r.json().then(function(e){ showStatus('⚠️ Email não enviado: ' + (e.error&&e.error.message||'erro'), true); });
+  }).catch(function(e){ showStatus('⚠️ Erro ao enviar email: ' + e.message, true); });
+}
+
+function renderConfigEmail() {
+  var emailGerente = CFG.emailGerente || '';
+  var emailAnalista = CFG.emailAnalista || '';
+  var h = '<div class="card" style="margin-bottom:12px">';
+  h += '<div class="card-hdr"><div class="card-title">⚙️ Configurações de Notificação</div></div>';
+  h += '<div class="card-body">';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  h += '<div><label style="font-size:11px;font-weight:600;color:#001F5B;display:block;margin-bottom:4px">Email da Gerente (aprovação)</label>';
+  h += '<input type="email" id="cfg-email-gerente" value="'+emailGerente+'" placeholder="gerente@pipefy.com" style="width:100%;border:1px solid #D8DCE6;border-radius:6px;padding:6px 10px;font-size:11px;outline:none;box-sizing:border-box">';
+  h += '</div>';
+  h += '<div><label style="font-size:11px;font-weight:600;color:#001F5B;display:block;margin-bottom:4px">Email da Analista (revisão)</label>';
+  h += '<input type="email" id="cfg-email-analista" value="'+emailAnalista+'" placeholder="analista@pipefy.com" style="width:100%;border:1px solid #D8DCE6;border-radius:6px;padding:6px 10px;font-size:11px;outline:none;box-sizing:border-box">';
+  h += '</div>';
+  h += '</div>';
+  h += '<button class="btn btn-gold" style="margin-top:10px;font-size:11px" onclick="saveCfgEmail()">💾 Salvar Configurações</button>';
+  h += '<span id="cfg-save-msg" style="font-size:11px;color:#1A7340;margin-left:10px"></span>';
+  h += '</div></div>';
+  return h;
+}
+
+function saveCfgEmail() {
+  var g = document.getElementById('cfg-email-gerente');
+  var a = document.getElementById('cfg-email-analista');
+  if(g) CFG.emailGerente = g.value.trim();
+  if(a) CFG.emailAnalista = a.value.trim();
+  saveCFG();
+  var msg = document.getElementById('cfg-save-msg');
+  if(msg){ msg.textContent = '✅ Salvo!'; setTimeout(function(){msg.textContent='';}, 3000); }
+}
+
 function renderReviewPanel(mes){
+  // Config card shown once per render
+  var configHtml = renderConfigEmail();
   var rev=getReview(mes),m=HIST[mes];if(!m)return '';
   var statusLabel=rev.status==='pending'?'⏳ Pendente':rev.status==='reviewed'?'✅ Revisado':'🔒 Aprovado';
   var statusBg=rev.status==='pending'?'#EEF1F8':rev.status==='reviewed'?'#FFF3CD':'#D4EDDA';
   var statusFg=rev.status==='pending'?'#666':rev.status==='reviewed'?'#7A5A00':'#1A7340';
-  var h='<div style="margin-top:16px">';
+  var h=configHtml+'<div style="margin-top:16px">';
   h+='<div style="font-size:10px;font-weight:700;color:#001F5B;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🔍 Revisão e Aprovação — '+m.mesRef+'</div>';
   h+='<div style="display:flex;gap:8px;margin-bottom:12px">';
   h+='<span style="background:'+statusBg+';color:'+statusFg+';padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">'+statusLabel+'</span>';
