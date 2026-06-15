@@ -2392,6 +2392,8 @@ function doReview(mes){
   if(!REVIEWS[mes])REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
   REVIEWS[mes].status='reviewed';
   REVIEWS[mes].reviewer={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
+  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
+  REVIEWS[mes].historico.push({tipo:'revisao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
   saveReviews();showStatus('✅ Revisão registrada por '+name);
   var dest=CFG.emailGerente||'';
   if(dest)sendEmailNotification('revisao',mes,name+'<'+email+'>',dest,comment);
@@ -2406,11 +2408,33 @@ function doApprove(mes){
   if(rev.status!=='reviewed'){showStatus('Aguardando revisão primeiro',true);return;}
   REVIEWS[mes].status='approved';
   REVIEWS[mes].approver={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
+  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
+  REVIEWS[mes].historico.push({tipo:'aprovacao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
   saveReviews();showStatus('🔒 Aprovado por '+name);
   var dest=CFG.emailAnalista||'';
   if(dest)sendEmailNotification('aprovacao',mes,name+'<'+email+'>',dest,comment);
   buildSidebar();render();
 }
+function doReprovar(mes){
+  var comment=document.getElementById('reprovar-comment-input').value.trim();
+  var email=getUserEmail(),name=getUserName();
+  if(!email){showStatus('Faça login para reprovar',true);return;}
+  if(!comment){showStatus('Descreva a dúvida ou motivo',true);return;}
+  var rev=getReview(mes);
+  if(rev.status!=='reviewed'){showStatus('Só é possível reprovar após revisão',true);return;}
+  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
+  REVIEWS[mes].historico.push({tipo:'reprovacao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
+  REVIEWS[mes].status='pending';
+  REVIEWS[mes].reviewer=null;
+  REVIEWS[mes].approver=null;
+  saveReviews();
+  showStatus('⚠️ Dúvida registrada — voltou para o Analista');
+  // Send email to analyst
+  var dest=CFG.emailAnalista||'';
+  if(dest)sendEmailNotification('reprovacao',mes,name+'<'+email+'>',dest,comment);
+  buildSidebar();render();
+}
+
 function undoReview(mes){
   REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
   saveReviews();buildSidebar();render();
@@ -2430,7 +2454,15 @@ function sendEmailNotification(tipo, mes, remetente, destinatario, comentario) {
   var mesRef = m ? m.mesRef : mes;
   var total = m ? BRL(m.total) : '';
   var assunto, corpo;
-  if (tipo === 'revisao') {
+  if (tipo === 'reprovacao') {
+    assunto = 'Apuracao Tributaria ' + mesRef + ' - Duvida / Reprovado';
+    corpo = 'Ola,\n\n' +
+      remetente + ' retornou a apuracao tributaria de ' + mesRef + ' com uma duvida.\n\n' +
+      'Motivo / Duvida: ' + comentario + '\n\n' +
+      'Por favor acesse o app para revisar e corrigir:\n' +
+      'https://jessicaramos-hue.github.io/apuracao-pipefy/Apuracao2026.html\n\n' +
+      'Atenciosamente,\nApp Apuracao Tributaria Pipefy 2026';
+  } else if (tipo === 'revisao') {
     assunto = 'Apuracao Tributaria ' + mesRef + ' - Aguardando Aprovacao';
     corpo = 'Ola,\n\n' +
       remetente + ' revisou a apuracao tributaria de ' + mesRef + '.\n\n' +
@@ -2540,9 +2572,30 @@ function renderReviewPanel(mes){
     h+='</div>';
   } else {
     h+='<textarea id="approve-comment-input" style="width:100%;border:1px solid #D8DCE6;border-radius:6px;padding:8px 10px;font-size:11px;font-family:inherit;resize:vertical;min-height:60px;outline:none;box-sizing:border-box" placeholder="Adicione seu comentário de aprovação..."></textarea>';
-    h+='<button class="btn" style="background:#C8962E;color:#fff;margin-top:8px" data-mes="'+mes+'" onclick="doApprove(this.dataset.mes)">🔒 Aprovar e Bloquear</button>';
+    h+='<div style="display:flex;gap:8px;margin-top:8px">';
+    h+='<button class="btn" style="background:#C8962E;color:#fff" data-mes="'+mes+'" onclick="doApprove(this.dataset.mes)">🔒 Aprovar e Bloquear</button>';
+    h+='<button class="btn" style="background:#FADBD8;color:#922B21" data-mes="'+mes+'" onclick="doReprovar(this.dataset.mes)">⚠️ Reprovar / Dúvida</button>';
+    h+="<input type='text' id='reprovar-comment-input' style='flex:1;border:1px solid #D8DCE6;border-radius:6px;padding:6px 10px;font-size:11px;outline:none' placeholder='Descreva a dúvida...'>";
+    h+='</div>';
   }
   h+='</div></div>';
+  // Histórico
+  var hist=(REVIEWS[mes]&&REVIEWS[mes].historico)||[];
+  if(hist.length>0){
+    h+='<div style="margin-top:8px">';
+    h+='<div style="font-size:10px;font-weight:700;color:#001F5B;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">📋 Histórico</div>';
+    hist.forEach(function(h2){
+      var bg=h2.tipo==='aprovacao'?'#D4EDDA':h2.tipo==='reprovacao'?'#FADBD8':'#FFF3CD';
+      var icon=h2.tipo==='aprovacao'?'🔒':h2.tipo==='reprovacao'?'⚠️':'✅';
+      var label=h2.tipo==='aprovacao'?'Aprovação':h2.tipo==='reprovacao'?'Reprovação/Dúvida':'Revisão';
+      h+='<div style="background:'+bg+';border-radius:6px;padding:8px 12px;margin-bottom:4px">';
+      h+='<div style="font-size:10px;font-weight:700;color:#001F5B">'+icon+' '+label+' — '+h2.nome+' &lt;'+h2.email+'&gt;</div>';
+      h+='<div style="font-size:11px;color:#2D3A4A;margin-top:2px">'+h2.comment+'</div>';
+      h+='<div style="font-size:10px;color:#888;margin-top:2px">'+h2.date+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
   return h;
 }
 
