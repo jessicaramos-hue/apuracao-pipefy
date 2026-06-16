@@ -232,7 +232,7 @@ table.ann .tot-row td{background:#C8962E!important;color:#fff!important;font-wei
 // ── CONFIG ─────────────────────────────────────────────────────────────────
 var CLIENT_ID = '319783809871-hpqnvd9aue9c15kfmpjqei5khkq58bk8.apps.googleusercontent.com';
 var SHEET_ID  = '1Hpi0j90MtrgLgx0MbI6QnHdb4rp6pZb8x0F90c0vBlE';
-var SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.send';
+var SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/gmail.send';
 var MESES_ALL = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 var MESES_FULL = {Jan:'Janeiro/2026',Fev:'Fevereiro/2026',Mar:'Março/2026',Abr:'Abril/2026',
                   Mai:'Maio/2026',Jun:'Junho/2026',Jul:'Julho/2026',Ago:'Agosto/2026',
@@ -289,7 +289,7 @@ function initGSI() {
     callback: function(resp) {
       if(resp.error) { showStatus('Erro de autenticação: '+resp.error, true); return; }
       accessToken = resp.access_token;
-      fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+resp.access_token}}).then(function(r){return r.json();}).then(function(u){window._userEmail=u.email||'';window._userName=u.name||u.email||'';}).catch(function(){});
+      fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+resp.access_token}}).then(function(r){return r.json();}).then(function(u){window._userEmail=u.email||'';window._userName=u.name||u.email||'';setTimeout(ensureReviewsSheet,2000);}).catch(function(){});
       // Hide login screen if still visible (manual login flow)
       var ls = document.getElementById('loginScreen');
       if (ls && !ls.classList.contains('hidden')) {
@@ -339,6 +339,7 @@ function handleCredential(response) {
   document.getElementById('userName').textContent = payload.name||payload.email||'';
   window._userEmail = payload.email||'';
   window._userName = payload.name||'';
+  setTimeout(ensureReviewsSheet, 2000);
   document.getElementById('userChip').style.display = 'flex';
   document.getElementById('loginScreen').classList.add('hidden');
   // Request access token for Sheets API
@@ -2394,7 +2395,9 @@ function doReview(mes){
   REVIEWS[mes].reviewer={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
   if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
   REVIEWS[mes].historico.push({tipo:'revisao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
-  saveReviews();showStatus('✅ Revisão registrada por '+name);
+  saveReviews();
+  appendReviewToSheets('✅ Revisão', mes, name, email, comment);
+  showStatus('✅ Revisão registrada por '+name);
   var dest=CFG.emailGerente||'';
   if(dest)sendEmailNotification('revisao',mes,name+'<'+email+'>',dest,comment);
   buildSidebar();render();
@@ -2410,7 +2413,9 @@ function doApprove(mes){
   REVIEWS[mes].approver={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
   if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
   REVIEWS[mes].historico.push({tipo:'aprovacao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
-  saveReviews();showStatus('🔒 Aprovado por '+name);
+  saveReviews();
+  appendReviewToSheets('🔒 Aprovação', mes, name, email, comment);
+  showStatus('🔒 Aprovado por '+name);
   var dest=CFG.emailAnalista||'';
   if(dest)sendEmailNotification('aprovacao',mes,name+'<'+email+'>',dest,comment);
   buildSidebar();render();
@@ -2428,8 +2433,8 @@ function doReprovar(mes){
   REVIEWS[mes].reviewer=null;
   REVIEWS[mes].approver=null;
   saveReviews();
+  appendReviewToSheets('⚠️ Reprovação/Dúvida', mes, name, email, comment);
   showStatus('⚠️ Dúvida registrada — voltou para o Analista');
-  // Send email to analyst
   var dest=CFG.emailAnalista||'';
   if(dest)sendEmailNotification('reprovacao',mes,name+'<'+email+'>',dest,comment);
   buildSidebar();render();
@@ -2597,6 +2602,60 @@ function renderReviewPanel(mes){
     h+='</div>';
   }
   return h;
+}
+
+
+// ── AUDITORIA NO GOOGLE SHEETS ───────────────────────────────────────────
+// Aba "Revisões" no Sheets: Data | Mês | Ação | Nome | Email | Comentário
+
+function appendReviewToSheets(acao, mes, nome, email, comentario) {
+  if (!accessToken || !SHEET_ID) return;
+  var mesRef = HIST[mes] ? HIST[mes].mesRef : mes;
+  var row = [
+    new Date().toLocaleString('pt-BR'),
+    mesRef,
+    acao,
+    nome,
+    email,
+    comentario
+  ];
+  var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + 
+            '/values/Revisões!A:F:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values: [row] })
+  }).then(function(r){
+    if(r.ok) console.log('Auditoria salva no Sheets: ' + acao + ' - ' + mesRef);
+    else r.json().then(function(e){ console.warn('Erro ao salvar auditoria:', e.error && e.error.message); });
+  }).catch(function(e){ console.warn('Erro auditoria Sheets:', e.message); });
+}
+
+function ensureReviewsSheet() {
+  if (!accessToken || !SHEET_ID) return;
+  // Check if sheet exists, create if not
+  fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID, {
+    headers: { 'Authorization': 'Bearer ' + accessToken }
+  }).then(function(r){ return r.json(); }).then(function(d){
+    var sheets = d.sheets || [];
+    var exists = sheets.some(function(s){ return s.properties.title === 'Revisões'; });
+    if (!exists) {
+      fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/batchUpdate', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'Revisões' } } }] })
+      }).then(function(r){ return r.json(); }).then(function(){
+        // Add header row
+        var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + 
+                  '/values/Revisões!A1:F1?valueInputOption=USER_ENTERED';
+        fetch(url, {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [['Data/Hora', 'Mês', 'Ação', 'Nome', 'E-mail', 'Comentário']] })
+        }).catch(function(){});
+      }).catch(function(){});
+    }
+  }).catch(function(){});
 }
 
 buildSidebar(); updateHeader(); render();
