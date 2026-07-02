@@ -1552,13 +1552,16 @@ function processRetencaoSheets(rows) {
     return null;
   }
   function mk(d){if(!d||d.getFullYear()!==2026)return null;return MESES_ALL[d.getMonth()]||null;}
+  // Layout REAL da aba "Retenção sobre faturamento" (11 colunas):
+  // 0=NÚMERO | 1=DATA EMISSÃO | 2=VALOR | 3=PIS | 4=COFINS | 5=DATA DE PAGAMENTO
+  // 6=Compensado PIS | 7=Compensado COFINS | 8=CNPJ/CPF TOMADOR | 9=TOMADOR | 10=CÓDIGO
   var last={nfse:'',emissao:null,valor:0,cnpj:'',tomador:''};
   rows.slice(1).forEach(function(row){
     var col0=String(row[0]||'').trim();
-    if(!col0&&!row[4]&&!row[5]) return;
-    var pis=tf(row[4]),cof=tf(row[5]);
-    var dPis=pd(row[9]),dCof=pd(row[10]);
-    var cnpj=String(row[11]||'').trim(),tom=String(row[12]||'').trim();
+    if(!col0&&!row[3]&&!row[4]) return;
+    var pis=tf(row[3]),cof=tf(row[4]);
+    var dPis=pd(row[6]),dCof=pd(row[7]);
+    var cnpj=String(row[8]||'').trim(),tom=String(row[9]||'').trim();
     if(col0&&!isNaN(parseFloat(col0.replace(/[^0-9.]/g,'')))){
       last={nfse:col0,emissao:pd(row[1]),valor:tf(row[2]),cnpj:cnpj||last.cnpj,tomador:tom||last.tomador};
     }
