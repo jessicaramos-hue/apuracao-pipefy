@@ -2475,22 +2475,56 @@ function getReview(mes){return REVIEWS[mes]||{status:'pending',reviewer:null,app
 function getUserEmail(){return window._userEmail||'';}
 function getUserName(){return window._userName||document.getElementById('userName').textContent||'';}
 
+function ensureAccessToken() {
+  return new Promise(function(resolve, reject){
+    if (accessToken) { resolve(accessToken); return; }
+    var settled = false;
+    // A 1ª tentativa é silenciosa (sem popup). Se a pessoa nunca autorizou
+    // este app antes (ex.: primeiro login da Gerente), o Google não conclui
+    // essa tentativa silenciosa e ela falha SEM avisar ninguém — por isso,
+    // se não responder em 2.5s, forçamos uma tela de consentimento visível.
+    var fallbackTimer = setTimeout(function(){
+      if (settled) return;
+      tokenClient.callback = function(resp){
+        if (settled) return; settled = true;
+        if (resp.error) { reject(new Error(resp.error)); return; }
+        accessToken = resp.access_token;
+        resolve(accessToken);
+      };
+      tokenClient.requestAccessToken({prompt:'consent'});
+    }, 2500);
+    tokenClient.callback = function(resp){
+      if (settled) return;
+      clearTimeout(fallbackTimer);
+      settled = true;
+      if (resp.error) { reject(new Error(resp.error)); return; }
+      accessToken = resp.access_token;
+      resolve(accessToken);
+    };
+    tokenClient.requestAccessToken({prompt:''});
+  });
+}
+
 function doReview(mes){
   var comment=document.getElementById('review-comment-input').value.trim();
   var email=getUserEmail(),name=getUserName();
   if(!email){showStatus('Faça login para revisar',true);return;}
   if(!comment){showStatus('Adicione um comentário',true);return;}
-  if(!REVIEWS[mes])REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
-  REVIEWS[mes].status='reviewed';
-  REVIEWS[mes].reviewer={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
-  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
-  REVIEWS[mes].historico.push({tipo:'revisao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
-  saveReviews();
-  appendReviewToSheets('✅ Revisão', mes, name, email, comment);
-  showStatus('✅ Revisão registrada por '+name);
-  var dest=CFG.emailGerente||'';
-  if(dest)sendEmailNotification('revisao',mes,name+'<'+email+'>',dest,comment);
-  buildSidebar();render();
+  showStatus('Salvando revisão no Google Sheets...');
+  appendReviewToSheets('✅ Revisão', mes, name, email, comment).then(function(){
+    if(!REVIEWS[mes])REVIEWS[mes]={status:'pending',reviewer:null,approver:null,historico:[]};
+    REVIEWS[mes].status='reviewed';
+    REVIEWS[mes].reviewer={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
+    if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
+    REVIEWS[mes].historico.push({tipo:'revisao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
+    saveReviews();
+    showStatus('✅ Revisão registrada por '+name+' — já sincronizada com o Sheets');
+    var dest=CFG.emailGerente||'';
+    if(dest)sendEmailNotification('revisao',mes,name+'<'+email+'>',dest,comment);
+    buildSidebar();render();
+  }).catch(function(e){
+    showStatus('❌ Não foi possível salvar no Google Sheets ('+e.message+'). A revisão NÃO foi enviada — se abriu uma tela de permissão do Google, aceite e tente de novo.', true);
+  });
 }
 function doApprove(mes){
   var comment=document.getElementById('approve-comment-input').value.trim();
@@ -2499,16 +2533,20 @@ function doApprove(mes){
   if(!comment){showStatus('Adicione um comentário',true);return;}
   var rev=getReview(mes);
   if(rev.status!=='reviewed'){showStatus('Aguardando revisão primeiro',true);return;}
-  REVIEWS[mes].status='approved';
-  REVIEWS[mes].approver={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
-  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
-  REVIEWS[mes].historico.push({tipo:'aprovacao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
-  saveReviews();
-  appendReviewToSheets('🔒 Aprovação', mes, name, email, comment);
-  showStatus('🔒 Aprovado por '+name);
-  var dest=CFG.emailAnalista||'';
-  if(dest)sendEmailNotification('aprovacao',mes,name+'<'+email+'>',dest,comment);
-  buildSidebar();render();
+  showStatus('Salvando aprovação no Google Sheets...');
+  appendReviewToSheets('🔒 Aprovação', mes, name, email, comment).then(function(){
+    REVIEWS[mes].status='approved';
+    REVIEWS[mes].approver={email:email,name:name,comment:comment,date:new Date().toLocaleString('pt-BR')};
+    if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
+    REVIEWS[mes].historico.push({tipo:'aprovacao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
+    saveReviews();
+    showStatus('🔒 Aprovado por '+name+' — já sincronizado com o Sheets');
+    var dest=CFG.emailAnalista||'';
+    if(dest)sendEmailNotification('aprovacao',mes,name+'<'+email+'>',dest,comment);
+    buildSidebar();render();
+  }).catch(function(e){
+    showStatus('❌ Não foi possível salvar no Google Sheets ('+e.message+'). A aprovação NÃO foi enviada — se abriu uma tela de permissão do Google, aceite e tente de novo.', true);
+  });
 }
 function doReprovar(mes){
   var comment=document.getElementById('reprovar-comment-input').value.trim();
@@ -2517,28 +2555,36 @@ function doReprovar(mes){
   if(!comment){showStatus('Descreva a dúvida ou motivo',true);return;}
   var rev=getReview(mes);
   if(rev.status!=='reviewed'){showStatus('Só é possível reprovar após revisão',true);return;}
-  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
-  REVIEWS[mes].historico.push({tipo:'reprovacao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
-  REVIEWS[mes].status='pending';
-  REVIEWS[mes].reviewer=null;
-  REVIEWS[mes].approver=null;
-  saveReviews();
-  appendReviewToSheets('⚠️ Reprovação/Dúvida', mes, name, email, comment);
-  showStatus('⚠️ Dúvida registrada — voltou para o Analista');
-  var dest=CFG.emailAnalista||'';
-  if(dest)sendEmailNotification('reprovacao',mes,name+'<'+email+'>',dest,comment);
-  buildSidebar();render();
+  showStatus('Salvando no Google Sheets...');
+  appendReviewToSheets('⚠️ Reprovação/Dúvida', mes, name, email, comment).then(function(){
+    if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
+    REVIEWS[mes].historico.push({tipo:'reprovacao',nome:name,email:email,comment:comment,date:new Date().toLocaleString('pt-BR')});
+    REVIEWS[mes].status='pending';
+    REVIEWS[mes].reviewer=null;
+    REVIEWS[mes].approver=null;
+    saveReviews();
+    showStatus('⚠️ Dúvida registrada — voltou para o Analista');
+    var dest=CFG.emailAnalista||'';
+    if(dest)sendEmailNotification('reprovacao',mes,name+'<'+email+'>',dest,comment);
+    buildSidebar();render();
+  }).catch(function(e){
+    showStatus('❌ Não foi possível salvar no Google Sheets ('+e.message+'). Tente de novo — se abriu uma tela de permissão do Google, aceite.', true);
+  });
 }
 
 function undoReview(mes){
   var email=getUserEmail(),name=getUserName();
-  if(!REVIEWS[mes])REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
-  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
-  REVIEWS[mes].historico.push({tipo:'desfazer',nome:name,email:email,comment:'',date:new Date().toLocaleString('pt-BR')});
-  REVIEWS[mes]={status:'pending',reviewer:null,approver:null,historico:REVIEWS[mes].historico};
+  if(!REVIEWS[mes])REVIEWS[mes]={status:'pending',reviewer:null,approver:null,historico:[]};
+  var historico=REVIEWS[mes].historico||[];
+  historico.push({tipo:'desfazer',nome:name,email:email,comment:'',date:new Date().toLocaleString('pt-BR')});
+  REVIEWS[mes]={status:'pending',reviewer:null,approver:null,historico:historico};
   saveReviews();
-  if(email) appendReviewToSheets('↩️ Desfazer', mes, name, email, '');
   buildSidebar();render();
+  if(email){
+    appendReviewToSheets('↩️ Desfazer', mes, name, email, '').catch(function(e){
+      showStatus('⚠️ Desfeito localmente, mas não sincronizou com o Sheets ('+e.message+'). Outras pessoas podem não ver essa mudança ainda.', true);
+    });
+  }
 }
 
 
@@ -2723,7 +2769,7 @@ function renderReviewPanel(mes){
 // Aba "Revisões" no Sheets: Data | Mês | Ação | Nome | Email | Comentário
 
 function appendReviewToSheets(acao, mes, nome, email, comentario) {
-  if (!accessToken || !SHEET_ID) return;
+  if (!SHEET_ID) return Promise.reject(new Error('SHEET_ID não configurado'));
   var mesRef = HIST[mes] ? HIST[mes].mesRef : mes;
   var row = [
     new Date().toLocaleString('pt-BR'),
@@ -2733,16 +2779,18 @@ function appendReviewToSheets(acao, mes, nome, email, comentario) {
     email,
     comentario
   ];
-  var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + 
-            '/values/Revisões!A:F:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values: [row] })
-  }).then(function(r){
-    if(r.ok) console.log('Auditoria salva no Sheets: ' + acao + ' - ' + mesRef);
-    else r.json().then(function(e){ console.warn('Erro ao salvar auditoria:', e.error && e.error.message); });
-  }).catch(function(e){ console.warn('Erro auditoria Sheets:', e.message); });
+  return ensureAccessToken().then(function(){
+    var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID +
+              '/values/Revisões!A:F:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] })
+    }).then(function(r){
+      if(r.ok){ console.log('Auditoria salva no Sheets: ' + acao + ' - ' + mesRef); return true; }
+      return r.json().then(function(e){ throw new Error((e.error && e.error.message) || ('HTTP '+r.status)); });
+    });
+  });
 }
 
 function ensureReviewsSheet() {
@@ -2809,12 +2857,15 @@ function lockMonth(mes) {
   if(!data){ showStatus('Sem dados calculados para travar', true); return; }
   if(!confirm('Travar '+ (data.mesRef||mes) +'? A partir de agora, este mês NUNCA mais será sobrescrito por uma releitura do Sheets — mesmo que os dados lá mudem depois.')) return;
   var jsonStr=JSON.stringify(data);
-  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+
-          '/values/Meses_Travados!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
-  fetch(url,{
-    method:'POST',
-    headers:{ 'Authorization':'Bearer '+accessToken, 'Content-Type':'application/json' },
-    body: JSON.stringify({ values: [[mes, new Date().toLocaleString('pt-BR'), name+' <'+email+'>', jsonStr, 'travado']] })
+  showStatus('Travando mês no Google Sheets...');
+  ensureAccessToken().then(function(){
+    var url='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+
+            '/values/Meses_Travados!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+    return fetch(url,{
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+accessToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ values: [[mes, new Date().toLocaleString('pt-BR'), name+' <'+email+'>', jsonStr, 'travado']] })
+    });
   }).then(function(r){
     if(r.ok){
       LOCKED[mes]={status:'travado', quando:new Date().toLocaleString('pt-BR'), por:name+' <'+email+'>', payload:data};
@@ -2823,19 +2874,22 @@ function lockMonth(mes) {
     } else {
       r.json().then(function(e){ showStatus('Erro ao travar: '+((e.error&&e.error.message)||'verifique o escopo de escrita do Google'), true); });
     }
-  }).catch(function(e){ showStatus('Erro ao travar: '+e.message, true); });
+  }).catch(function(e){ showStatus('Erro ao travar: '+e.message+' — se abriu uma tela de permissão do Google, aceite e tente de novo.', true); });
 }
 
 function unlockMonth(mes) {
   var email=getUserEmail(), name=getUserName();
   if(!email){ showStatus('Faça login para destravar', true); return; }
   if(!confirm('Destravar '+mes+'? Na próxima sincronização os dados voltam a ser lidos e recalculados a partir do Sheets.')) return;
-  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+
-          '/values/Meses_Travados!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
-  fetch(url,{
-    method:'POST',
-    headers:{ 'Authorization':'Bearer '+accessToken, 'Content-Type':'application/json' },
-    body: JSON.stringify({ values: [[mes, new Date().toLocaleString('pt-BR'), name+' <'+email+'>', '', 'destravado']] })
+  showStatus('Destravando mês no Google Sheets...');
+  ensureAccessToken().then(function(){
+    var url='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+
+            '/values/Meses_Travados!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+    return fetch(url,{
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+accessToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ values: [[mes, new Date().toLocaleString('pt-BR'), name+' <'+email+'>', '', 'destravado']] })
+    });
   }).then(function(r){
     if(r.ok){
       delete LOCKED[mes];
@@ -2844,7 +2898,7 @@ function unlockMonth(mes) {
     } else {
       r.json().then(function(e){ showStatus('Erro ao destravar: '+((e.error&&e.error.message)||''), true); });
     }
-  }).catch(function(e){ showStatus('Erro ao destravar: '+e.message, true); });
+  }).catch(function(e){ showStatus('Erro ao destravar: '+e.message+' — se abriu uma tela de permissão do Google, aceite e tente de novo.', true); });
 }
 
 
