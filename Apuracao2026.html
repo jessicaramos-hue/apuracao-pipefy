@@ -2768,6 +2768,34 @@ function renderReviewPanel(mes){
 // ── AUDITORIA NO GOOGLE SHEETS ───────────────────────────────────────────
 // Aba "Revisões" no Sheets: Data | Mês | Ação | Nome | Email | Comentário
 
+// Garante que uma aba exista na planilha antes de gravar nela.
+// Retorna uma Promise que só resolve depois que a aba já existe de fato
+// (cria a aba + escreve o cabeçalho, se necessário). Isso evita o erro
+// "Unable to parse range" (400) quando a aba ainda não foi criada.
+function ensureSheetExists(nomeAba, cabecalho) {
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID, {
+    headers: { 'Authorization': 'Bearer ' + accessToken }
+  }).then(function(r){ return r.json(); }).then(function(d){
+    var sheets = d.sheets || [];
+    var exists = sheets.some(function(s){ return s.properties.title === nomeAba; });
+    if (exists) return true;
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/batchUpdate', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: nomeAba } } }] })
+    }).then(function(r){ return r.json(); }).then(function(){
+      var range = nomeAba + '!A1:' + String.fromCharCode(64 + cabecalho.length) + '1';
+      var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID +
+                '/values/' + encodeURIComponent(range) + '?valueInputOption=USER_ENTERED';
+      return fetch(url, {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [cabecalho] })
+      }).then(function(){ return true; });
+    });
+  });
+}
+
 function appendReviewToSheets(acao, mes, nome, email, comentario) {
   if (!SHEET_ID) return Promise.reject(new Error('SHEET_ID não configurado'));
   var mesRef = HIST[mes] ? HIST[mes].mesRef : mes;
@@ -2780,8 +2808,10 @@ function appendReviewToSheets(acao, mes, nome, email, comentario) {
     comentario
   ];
   return ensureAccessToken().then(function(){
+    return ensureSheetExists('Revisões', ['Data/Hora', 'Mês', 'Ação', 'Nome', 'E-mail', 'Comentário']);
+  }).then(function(){
     var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID +
-              '/values/Revisões!A:F:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+              '/values/' + encodeURIComponent('Revisões!A:F') + ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
     return fetch(url, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
@@ -2795,29 +2825,7 @@ function appendReviewToSheets(acao, mes, nome, email, comentario) {
 
 function ensureReviewsSheet() {
   if (!accessToken || !SHEET_ID) return;
-  // Check if sheet exists, create if not
-  fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID, {
-    headers: { 'Authorization': 'Bearer ' + accessToken }
-  }).then(function(r){ return r.json(); }).then(function(d){
-    var sheets = d.sheets || [];
-    var exists = sheets.some(function(s){ return s.properties.title === 'Revisões'; });
-    if (!exists) {
-      fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/batchUpdate', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'Revisões' } } }] })
-      }).then(function(r){ return r.json(); }).then(function(){
-        // Add header row
-        var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + 
-                  '/values/Revisões!A1:F1?valueInputOption=USER_ENTERED';
-        fetch(url, {
-          method: 'PUT',
-          headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [['Data/Hora', 'Mês', 'Ação', 'Nome', 'E-mail', 'Comentário']] })
-        }).catch(function(){});
-      }).catch(function(){});
-    }
-  }).catch(function(){});
+  ensureSheetExists('Revisões', ['Data/Hora', 'Mês', 'Ação', 'Nome', 'E-mail', 'Comentário']).catch(function(){});
 }
 
 // ── Travamento de meses (protege contra sobrescrita do Sheets) ─────────────
@@ -2825,27 +2833,7 @@ function ensureReviewsSheet() {
 // Só pode ser criada/lida com o escopo de escrita 'spreadsheets' concedido.
 function ensureLockedSheet() {
   if (!accessToken || !SHEET_ID) return;
-  fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID, {
-    headers: { 'Authorization': 'Bearer ' + accessToken }
-  }).then(function(r){ return r.json(); }).then(function(d){
-    var sheets = d.sheets || [];
-    var exists = sheets.some(function(s){ return s.properties.title === 'Meses_Travados'; });
-    if (!exists) {
-      fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/batchUpdate', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'Meses_Travados' } } }] })
-      }).then(function(r){ return r.json(); }).then(function(){
-        var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID +
-                  '/values/Meses_Travados!A1:E1?valueInputOption=USER_ENTERED';
-        fetch(url, {
-          method: 'PUT',
-          headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [['Mês', 'Data/Hora', 'Travado por', 'JSON', 'Status']] })
-        }).catch(function(){});
-      }).catch(function(){});
-    }
-  }).catch(function(){});
+  ensureSheetExists('Meses_Travados', ['Mês', 'Data/Hora', 'Travado por', 'JSON', 'Status']).catch(function(){});
 }
 
 function lockMonth(mes) {
@@ -2859,8 +2847,10 @@ function lockMonth(mes) {
   var jsonStr=JSON.stringify(data);
   showStatus('Travando mês no Google Sheets...');
   ensureAccessToken().then(function(){
+    return ensureSheetExists('Meses_Travados', ['Mês', 'Data/Hora', 'Travado por', 'JSON', 'Status']);
+  }).then(function(){
     var url='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+
-            '/values/Meses_Travados!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+            '/values/'+encodeURIComponent('Meses_Travados!A:E')+':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
     return fetch(url,{
       method:'POST',
       headers:{ 'Authorization':'Bearer '+accessToken, 'Content-Type':'application/json' },
@@ -2883,8 +2873,10 @@ function unlockMonth(mes) {
   if(!confirm('Destravar '+mes+'? Na próxima sincronização os dados voltam a ser lidos e recalculados a partir do Sheets.')) return;
   showStatus('Destravando mês no Google Sheets...');
   ensureAccessToken().then(function(){
+    return ensureSheetExists('Meses_Travados', ['Mês', 'Data/Hora', 'Travado por', 'JSON', 'Status']);
+  }).then(function(){
     var url='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+
-            '/values/Meses_Travados!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+            '/values/'+encodeURIComponent('Meses_Travados!A:E')+':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
     return fetch(url,{
       method:'POST',
       headers:{ 'Authorization':'Bearer '+accessToken, 'Content-Type':'application/json' },
