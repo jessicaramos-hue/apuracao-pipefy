@@ -397,6 +397,41 @@ function tf(v) {
   return parseFloat(s)||0;
 }
 
+// Aba "Revisões" (log de auditoria já existente): Data/Hora | Mês | Ação | Nome | E-mail | Comentário
+// Reconstrói o status atual de cada mês (pending/reviewed/approved) a partir
+// do histórico — assim TODOS os usuários (qualquer navegador/computador)
+// enxergam o mesmo status, em vez de cada um ter seu próprio localStorage.
+function processReviewsRows(rows) {
+  var out = {};
+  if(!rows || rows.length<2) return out;
+  // A aba grava o mês por extenso (ex: "Junho/2026"), mas o app indexa
+  // por abreviação (ex: "Jun") — precisa converter de volta.
+  var FULL_TO_SHORT = {};
+  Object.keys(MESES_FULL).forEach(function(k){ FULL_TO_SHORT[MESES_FULL[k]] = k; });
+  rows.slice(1).forEach(function(row){
+    var data=String(row[0]||'').trim(), mesRaw=String(row[1]||'').trim(), acao=String(row[2]||'').trim(),
+        nome=String(row[3]||'').trim(), email=String(row[4]||'').trim(), comentario=String(row[5]||'').trim();
+    var mes = FULL_TO_SHORT[mesRaw] || (MESES_ALL.indexOf(mesRaw)>=0 ? mesRaw : null);
+    if(!mes || !acao) return;
+    if(!out[mes]) out[mes]={status:'pending', reviewer:null, approver:null, historico:[]};
+    var entry={email:email, name:nome, comment:comentario, date:data};
+    if(acao.indexOf('Aprovação')>=0){
+      out[mes].status='approved'; out[mes].approver=entry;
+      out[mes].historico.push({tipo:'aprovacao',nome:nome,email:email,comment:comentario,date:data});
+    } else if(acao.indexOf('Reprovação')>=0 || acao.indexOf('Dúvida')>=0){
+      out[mes].status='pending'; out[mes].reviewer=null; out[mes].approver=null;
+      out[mes].historico.push({tipo:'reprovacao',nome:nome,email:email,comment:comentario,date:data});
+    } else if(acao.indexOf('Desfazer')>=0){
+      out[mes].status='pending'; out[mes].reviewer=null; out[mes].approver=null;
+      out[mes].historico.push({tipo:'desfazer',nome:nome,email:email,comment:comentario,date:data});
+    } else if(acao.indexOf('Revisão')>=0){
+      out[mes].status='reviewed'; out[mes].reviewer=entry;
+      out[mes].historico.push({tipo:'revisao',nome:nome,email:email,comment:comentario,date:data});
+    }
+  });
+  return out;
+}
+
 // ── Processamento Meses Travados ───────────────────────────────────────────
 // Aba "Meses_Travados": Mês | Data/Hora | Travado por | JSON | Status
 // Linhas são um log (append-only); para cada mês, a ÚLTIMA linha manda —
@@ -693,6 +728,18 @@ async function syncSheets() {
     } catch(e) {
       console.warn('Aba Meses_Travados ainda não existe ou não pôde ser lida:', e.message);
       LOCKED = {};
+    }
+    setLoadingSub('Lendo revisões e aprovações...');
+    try {
+      var revRows = await fetchSheet('Revisões');
+      var remoteReviews = processReviewsRows(revRows);
+      // A planilha é a fonte da verdade (compartilhada entre todo mundo).
+      // Preserva no local qualquer mês que só exista no cache local e
+      // ainda não tenha sido sincronizado (ex.: ação feita offline).
+      Object.keys(remoteReviews).forEach(function(m){ REVIEWS[m]=remoteReviews[m]; });
+      saveReviews();
+    } catch(e) {
+      console.warn('Aba Revisões ainda não existe ou não pôde ser lida:', e.message);
     }
     setLoadingSub('Processando dados...');
     console.log('DEP rows[0]:', JSON.stringify(depRows[0]));
@@ -2484,8 +2531,14 @@ function doReprovar(mes){
 }
 
 function undoReview(mes){
-  REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
-  saveReviews();buildSidebar();render();
+  var email=getUserEmail(),name=getUserName();
+  if(!REVIEWS[mes])REVIEWS[mes]={status:'pending',reviewer:null,approver:null};
+  if(!REVIEWS[mes].historico)REVIEWS[mes].historico=[];
+  REVIEWS[mes].historico.push({tipo:'desfazer',nome:name,email:email,comment:'',date:new Date().toLocaleString('pt-BR')});
+  REVIEWS[mes]={status:'pending',reviewer:null,approver:null,historico:REVIEWS[mes].historico};
+  saveReviews();
+  if(email) appendReviewToSheets('↩️ Desfazer', mes, name, email, '');
+  buildSidebar();render();
 }
 
 
