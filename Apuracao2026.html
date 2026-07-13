@@ -2380,18 +2380,29 @@ function dtEstorno(dt){
   return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
 }
 
+// Escapa e envolve QUALQUER campo em aspas (padrão CSV/RFC4180).
+// Necessário porque os valores de Débito/Crédito usam vírgula como separador
+// decimal (ex: "1076,71") — sem aspas, essa vírgula seria lida como se fosse
+// a próxima coluna e bagunçaria o alinhamento de tudo depois.
+function csvField(v){
+  v = (v===null||v===undefined) ? '' : String(v);
+  return '"' + v.replace(/"/g,'""') + '"';
+}
+
 // Layout NetSuite: Data,Estorno,ID Conta,Débito,Crédito,Memorando,Centro de custo,N° Registro,Criado por,Nome
 var NS_HEADER = 'Data,Estorno,ID Conta,Débito,Crédito,Memorando,Centro de custo,N° Registro,Criado por,Nome';
 function nsLinha(dt, estorno, l, numRegistro, criadoPor){
   return [
-    dt, estorno, contaId(l.conta),
-    l.debito !== '' ? fmtBRL(l.debito) : '',
-    l.credito !== '' ? fmtBRL(l.credito) : '',
-    '"' + l.memo + '"',
-    '', // Centro de custo — não se aplica a estes lançamentos internos de PIS/COFINS
-    numRegistro,
-    '"' + (criadoPor||'') + '"',
-    '' // Nome — sem contraparte externa nestes lançamentos
+    csvField(dt),
+    csvField(estorno),
+    csvField(contaId(l.conta)),
+    csvField(l.debito !== '' ? fmtBRL(l.debito) : ''),
+    csvField(l.credito !== '' ? fmtBRL(l.credito) : ''),
+    csvField(l.memo),
+    csvField(''), // Centro de custo — não se aplica a estes lançamentos internos de PIS/COFINS
+    csvField(numRegistro),
+    csvField(criadoPor||''),
+    csvField('') // Nome — sem contraparte externa nestes lançamentos
   ].join(',');
 }
 
