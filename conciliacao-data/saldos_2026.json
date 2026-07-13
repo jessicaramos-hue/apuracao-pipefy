@@ -1,0 +1,137 @@
+{
+  "Jun": {
+    "mes": "Jun",
+    "ano": "2026",
+    "salvoEm": "2026-07-13T19:14:39.510Z",
+    "contas": [
+      {
+        "conta": "2.1.03.01.0020",
+        "desc": "IRRF A RECOLHER SOBRE ALUGUEL",
+        "sub": "Pipefy Ltda",
+        "sc": -1160.42,
+        "driveId": "1o6r7fhBlnFOnlIcIv-eUTK84hMNGzESB4Q3JmB4Vipc",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1o6r7fhBlnFOnlIcIv-eUTK84hMNGzESB4Q3JmB4Vipc/edit?usp=drivesdk"
+      },
+      {
+        "conta": "2.1.03.01.0017",
+        "desc": "INSS S/ FATURAMENTO (DESONERACAO)",
+        "sub": "Pipefy Ltda",
+        "sc": 0.06,
+        "driveId": "1DyMnJJJoXKxoFU9M3g31YaMVtLXvBnErtE2cC7QLqr8",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1DyMnJJJoXKxoFU9M3g31YaMVtLXvBnErtE2cC7QLqr8/edit?usp=drivesdk"
+      },
+      {
+        "conta": "2.1.03.01.0016",
+        "desc": "ISS S/ FATURAMENTO A RECOLHER",
+        "sub": "Pipefy Ltda",
+        "sc": -6329.32,
+        "driveId": "1p0phIC4A26utoa_kmG8ZdhK5qeKtdpxTAvB_h-zHSDc",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1p0phIC4A26utoa_kmG8ZdhK5qeKtdpxTAvB_h-zHSDc/edit?usp=drivesdk"
+      },
+      {
+        "conta": "2.1.03.01.0015",
+        "desc": "COFINS CUMULATIVO  A RECOLHER",
+        "sub": "Pipefy Ltda",
+        "sc": -0.02,
+        "driveId": "1bPNkBKhVzPWD8YQ0_XAIQF4fp7dDu3m818PmEsV0hys",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1bPNkBKhVzPWD8YQ0_XAIQF4fp7dDu3m818PmEsV0hys/edit?usp=drivesdk"
+      },
+      {
+        "conta": "2.1.03.01.0011",
+        "desc": "COFINS A RECOLHER",
+        "sub": "Pipefy Ltda",
+        "sc": -28.54,
+        "driveId": "1elI21uc85QSSolMGrd3lynWBmqQrcq51QP28o9PO2_M",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1elI21uc85QSSolMGrd3lynWBmqQrcq51QP28o9PO2_M/edit?usp=drivesdk"
+      },
+      {
+        "conta": "2.1.03.01.0010",
+        "desc": "PIS A RECOLHER",
+        "sub": "Pipefy Ltda",
+        "sc": -6.18,
+        "driveId": "1X09UpL0I7I5_Fz78yeiffG0aqDP4UP09RfE1BfOJMJ8",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1X09UpL0I7I5_Fz78yeiffG0aqDP4UP09RfE1BfOJMJ8/edit?usp=drivesdk"
+      },
+      {
+        "conta": "2.1.03.01.0002",
+        "desc": "CSLL A PAGAR",
+        "sub": "Pipefy Ltda",
+        "sc": -12628.04,
+        "driveId": "1OKHh-b1Kne2e-BnWKJypUBUdXXMI0HZCD_Jrp-csQfg",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1OKHh-b1Kne2e-BnWKJypUBUdXXMI0HZCD_Jrp-csQfg/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0026",
+        "desc": "CSLL S/ FATURAMENTO A RECUPERAR",
+        "sub": "Pipefy Ltda",
+        "sc": -35778.89,
+        "driveId": "1YfIldpE_n-oHRMQghr9LwVhR4It--e3YWRVZ6QbCag0",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1YfIldpE_n-oHRMQghr9LwVhR4It--e3YWRVZ6QbCag0/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0025",
+        "desc": "COFINS S/ FATURAMENTO A RECUPERAR",
+        "sub": "Pipefy Ltda",
+        "sc": -44279.45,
+        "driveId": "1cCBQ87uHyb-ootyZhnsyGrfaT9a4L82K-sbUrpAbbYU",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1cCBQ87uHyb-ootyZhnsyGrfaT9a4L82K-sbUrpAbbYU/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0024",
+        "desc": "PIS S/ FATURAMENTO A RECUPERAR",
+        "sub": "Pipefy Ltda",
+        "sc": -9417.02,
+        "driveId": "1S82gt6mWd8rvlDdgcYpeQPXiEwrVp-ISvzdy_lVDP1A",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1S82gt6mWd8rvlDdgcYpeQPXiEwrVp-ISvzdy_lVDP1A/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0016",
+        "desc": "IRPJ S/ FATURAMENTO A RECUPERAR",
+        "sub": "Pipefy Ltda",
+        "sc": -54015.04,
+        "driveId": "18dkEphnfgPwv8wtoRJ47XdEr_iDbFvMLQSCfefzv_GQ",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/18dkEphnfgPwv8wtoRJ47XdEr_iDbFvMLQSCfefzv_GQ/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0015",
+        "desc": "COFINS A RECUPERAR",
+        "sub": "Pipefy Ltda",
+        "sc": -200446.34,
+        "driveId": "14XbkM7j50gSoNQR0_GZ412J6JElpkDXh8CT3pfltmEI",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/14XbkM7j50gSoNQR0_GZ412J6JElpkDXh8CT3pfltmEI/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0014",
+        "desc": "PIS A RECUPERAR",
+        "sub": "Pipefy Ltda",
+        "sc": -47125.12,
+        "driveId": "1cP7SDgzDHwRVw2pMIff_UImrz-Z2s0KZwKah51wVFC4",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1cP7SDgzDHwRVw2pMIff_UImrz-Z2s0KZwKah51wVFC4/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0002",
+        "desc": "IR SOBRE APLICACOES FINANCEIRAS",
+        "sub": "Pipefy Ltda",
+        "sc": -327823.92,
+        "driveId": "1BsmEDY-mQtsqYSb8gXHYrqEY-x7tq-mTmQnrfElU3ys",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1BsmEDY-mQtsqYSb8gXHYrqEY-x7tq-mTmQnrfElU3ys/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0001",
+        "desc": "IMPOSTOS A RECUPERAR",
+        "sub": "Pipefy Ltda",
+        "sc": -1734.49,
+        "driveId": "1pOm2wWD4p7RhyGFCP2nqkWRV416lJEO56omjjoTkZ-w",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1pOm2wWD4p7RhyGFCP2nqkWRV416lJEO56omjjoTkZ-w/edit?usp=drivesdk"
+      },
+      {
+        "conta": "1.1.04.01.0023",
+        "desc": "PREPAID STATE INCOME TAX",
+        "sub": "Pipefy Inc",
+        "sc": -7960.77,
+        "driveId": "1zus3GWaaE6PrvojddppZ8xy34ImQB4bDvaliHBUDP8E",
+        "driveUrl": "https://docs.google.com/spreadsheets/d/1zus3GWaaE6PrvojddppZ8xy34ImQB4bDvaliHBUDP8E/edit?usp=drivesdk"
+      }
+    ]
+  }
+}
